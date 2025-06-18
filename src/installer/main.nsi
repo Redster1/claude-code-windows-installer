@@ -86,6 +86,7 @@ Var SkipCurl
 Var SkipClaude
 Var RebootRequired
 
+
 ; Custom page functions
 Function DependencyCheckPage
   !insertmacro MUI_HEADER_TEXT "System Dependencies" "Checking your system for required components..."
@@ -122,108 +123,348 @@ Function DependencyCheckPageLeave
 FunctionEnd
 
 Function CheckDependenciesAsync
-  ; Update progress
-  SendMessage $DependencyProgressBar ${PBM_SETPOS} 10 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:🔍 Starting dependency scan..."
+  ; Initialize detection variables
+  StrCpy $SkipWSL2 "false"
+  StrCpy $SkipNodeJS "false"
+  StrCpy $SkipGit "false"
+  StrCpy $SkipCurl "false"
+  StrCpy $SkipClaude "false"
   
-  ; Check WSL2
-  SendMessage $DependencyProgressBar ${PBM_SETPOS} 20 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking WSL2..."
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux | Select-Object -ExpandProperty State"'
+  ; Update progress
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 5 0
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:🔍 Starting comprehensive dependency scan..."
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking both Windows and WSL environments..."
+  
+  ; Check WSL2 using PowerShell module (most comprehensive)
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 15 0
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:📦 Checking WSL2 installation..."
+  Call CheckWSL2Comprehensive
+  
+  ; Check Node.js in both Windows and WSL
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 30 0
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:📦 Checking Node.js (Windows + WSL)..."
+  Call CheckNodeJSDual
+  
+  ; Check Git in both Windows and WSL
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 50 0
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:📦 Checking Git (Windows + WSL)..."
+  Call CheckGitDual
+  
+  ; Check Curl in both Windows and WSL
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 70 0
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:📦 Checking Curl (Windows + WSL)..."
+  Call CheckCurlDual
+  
+  ; Check Claude Code in both Windows and WSL (most important!)
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 85 0
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:🤖 Checking Claude Code (Windows + WSL)..."
+  Call CheckClaudeCodeDual
+  
+  ; Complete scan
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 100 0
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:✅ Comprehensive dependency scan completed"
+  
+  ${NSD_SetText} $DependencyStatusLabel "Dependency scan completed. Review detailed results above."
+FunctionEnd
+
+Function CheckWSL2Comprehensive
+  ; Try PowerShell module first (most accurate) - use fallback path approach
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "try { $$ModulePath = Join-Path $$env:LOCALAPPDATA \"ClaudeCode\scripts\powershell\ClaudeCodeInstaller.psm1\"; if (Test-Path $$ModulePath) { Import-Module $$ModulePath -Force; Test-WSL2Installation | ConvertTo-Json -Compress } else { \"{}\" } } catch { \"{}\" }"'
   Pop $0 ; Exit code
-  Pop $1 ; Result
+  Pop $1 ; JSON result
+  
   ${If} $0 == 0
-  ${AndIf} $1 == "Enabled"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ WSL2 found and enabled"
-    StrCpy $SkipWSL2 "true"
-  ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ WSL2 not found or disabled"
-    StrCpy $SkipWSL2 "false"
+  ${AndIf} $1 != ""
+  ${AndIf} $1 != "{}"
+    ; Parse PowerShell JSON result
+    ${If} $1 != ""
+      ; Check if WSL2 is installed from JSON
+      nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "try { (\'$1\' | ConvertFrom-Json).Installed } catch { \'false\' }"'
+      Pop $0
+      Pop $2 ; Installed status
+      
+      ${If} $2 == "True"
+        ; Get version and distributions
+        nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "try { (\'$1\' | ConvertFrom-Json).Version } catch { \'Unknown\' }"'
+        Pop $0
+        Pop $3 ; Version
+        
+        nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "try { (\'$1\' | ConvertFrom-Json).Distributions.Count } catch { 0 }"'
+        Pop $0
+        Pop $4 ; Distribution count
+        
+        SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ WSL2 installed: Version $3"
+        SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   📋 Found $4 WSL distribution(s)"
+        StrCpy $SkipWSL2 "true"
+        Return
+      ${EndIf}
+    ${EndIf}
   ${EndIf}
   
-  ; Check Node.js
-  SendMessage $DependencyProgressBar ${PBM_SETPOS} 40 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking Node.js..."
+  ; Fallback to direct WSL check
+  nsExec::ExecToStack 'wsl --status 2>nul'
+  Pop $0
+  ${If} $0 == 0
+    nsExec::ExecToStack 'wsl --version 2>nul'
+    Pop $0
+    Pop $1 ; Version output
+    
+    ${If} $0 == 0
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ WSL2 detected via direct check"
+      StrCpy $SkipWSL2 "true"
+    ${Else}
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ⚠️ WSL installed but version unclear"
+      StrCpy $SkipWSL2 "false"
+    ${EndIf}
+  ${Else}
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ WSL2 not installed or not accessible"
+    StrCpy $SkipWSL2 "false"
+  ${EndIf}
+FunctionEnd
+
+Function CheckNodeJSDual
+  StrCpy $5 "false" ; Found flag
+  
+  ; Check Windows Node.js
   nsExec::ExecToStack 'node --version 2>nul'
   Pop $0
   ${If} $0 == 0
-    Pop $NodeJSStatus
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Node.js found: $NodeJSStatus"
-    StrCpy $SkipNodeJS "true"
-  ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Node.js not found"
-    StrCpy $SkipNodeJS "false"
+    Pop $1 ; Version
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Node.js in Windows: $1"
+    StrCpy $5 "true"
+    StrCpy $NodeJSStatus "$1 (Windows)"
   ${EndIf}
   
-  ; Check Git
-  SendMessage $DependencyProgressBar ${PBM_SETPOS} 60 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking Git..."
+  ; Check WSL Node.js (if WSL is available)
+  ${If} $SkipWSL2 == "true"
+    nsExec::ExecToStack 'wsl -- node --version 2>/dev/null'
+    Pop $0
+    ${If} $0 == 0
+      Pop $2 ; WSL Version
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Node.js in WSL: $2"
+      StrCpy $5 "true"
+      ; Prefer WSL version if both exist
+      StrCpy $NodeJSStatus "$2 (WSL)"
+    ${EndIf}
+  ${EndIf}
+  
+  ${If} $5 == "true"
+    StrCpy $SkipNodeJS "true"
+  ${Else}
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Node.js not found in Windows or WSL"
+    StrCpy $SkipNodeJS "false"
+  ${EndIf}
+FunctionEnd
+
+Function CheckGitDual
+  StrCpy $5 "false" ; Found flag
+  
+  ; Check Windows Git
   nsExec::ExecToStack 'git --version 2>nul'
   Pop $0
   ${If} $0 == 0
-    Pop $GitStatus
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Git found: $GitStatus"
-    StrCpy $SkipGit "true"
-  ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Git not found"
-    StrCpy $SkipGit "false"
+    Pop $1 ; Version
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Git in Windows: $1"
+    StrCpy $5 "true"
+    StrCpy $GitStatus "$1 (Windows)"
   ${EndIf}
   
-  ; Check Curl  
-  SendMessage $DependencyProgressBar ${PBM_SETPOS} 80 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking Curl..."
+  ; Check WSL Git (if WSL is available)
+  ${If} $SkipWSL2 == "true"
+    nsExec::ExecToStack 'wsl -- git --version 2>/dev/null'
+    Pop $0
+    ${If} $0 == 0
+      Pop $2 ; WSL Version
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Git in WSL: $2"
+      StrCpy $5 "true"
+      ; Keep Windows version if both, as it's more useful for installer
+      ${If} $GitStatus == ""
+        StrCpy $GitStatus "$2 (WSL)"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  
+  ${If} $5 == "true"
+    StrCpy $SkipGit "true"
+  ${Else}
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Git not found in Windows or WSL"
+    StrCpy $SkipGit "false"
+  ${EndIf}
+FunctionEnd
+
+Function CheckCurlDual
+  StrCpy $5 "false" ; Found flag
+  
+  ; Check Windows Curl
   nsExec::ExecToStack 'curl --version 2>nul'
   Pop $0
   ${If} $0 == 0
-    Pop $CurlStatus
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Curl found"
-    StrCpy $SkipCurl "true"
-  ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Curl not found"
-    StrCpy $SkipCurl "false"
+    Pop $1 ; Version
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Curl in Windows (built-in)"
+    StrCpy $5 "true"
+    StrCpy $CurlStatus "Windows built-in"
   ${EndIf}
   
-  ; Check Claude Code
-  SendMessage $DependencyProgressBar ${PBM_SETPOS} 90 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking Claude Code..."
+  ; Check WSL Curl (if WSL is available)
+  ${If} $SkipWSL2 == "true"
+    nsExec::ExecToStack 'wsl -- curl --version 2>/dev/null'
+    Pop $0
+    ${If} $0 == 0
+      Pop $2 ; WSL Version
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Curl in WSL"
+      StrCpy $5 "true"
+      ; Keep Windows version as primary
+      ${If} $CurlStatus == ""
+        StrCpy $CurlStatus "WSL"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  
+  ${If} $5 == "true"
+    StrCpy $SkipCurl "true"
+  ${Else}
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Curl not found in Windows or WSL"
+    StrCpy $SkipCurl "false"
+  ${EndIf}
+FunctionEnd
+
+Function CheckClaudeCodeDual
+  StrCpy $5 "false" ; Found flag
+  StrCpy $6 "" ; Location found
+  
+  ; Check Windows Claude Code
   nsExec::ExecToStack 'claude --version 2>nul'
   Pop $0
   ${If} $0 == 0
-    Pop $ClaudeStatus
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Claude Code found: $ClaudeStatus"
-    StrCpy $SkipClaude "true"
-  ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Claude Code not found"
-    StrCpy $SkipClaude "false"
+    Pop $1 ; Version
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Claude Code in Windows: $1"
+    StrCpy $5 "true"
+    StrCpy $6 "Windows"
+    StrCpy $ClaudeStatus "$1 (Windows)"
   ${EndIf}
   
-  ; Complete
-  SendMessage $DependencyProgressBar ${PBM_SETPOS} 100 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:✅ Dependency scan completed"
+  ; Check WSL Claude Code (MOST IMPORTANT - user said it's installed in WSL!)
+  ${If} $SkipWSL2 == "true"
+    ; Try default WSL distribution
+    nsExec::ExecToStack 'wsl -- claude --version 2>/dev/null'
+    Pop $0
+    ${If} $0 == 0
+      Pop $2 ; WSL Version
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Claude Code in WSL: $2"
+      StrCpy $5 "true"
+      StrCpy $6 "WSL"
+      StrCpy $ClaudeStatus "$2 (WSL)"
+    ${Else}
+      ; Try specific Debian distribution (user mentioned Debian)
+      nsExec::ExecToStack 'wsl -d debian -- claude --version 2>/dev/null'
+      Pop $0
+      ${If} $0 == 0
+        Pop $3 ; Debian Version
+        SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Claude Code in WSL (Debian): $3"
+        StrCpy $5 "true"
+        StrCpy $6 "WSL-Debian"
+        StrCpy $ClaudeStatus "$3 (WSL-Debian)"
+      ${Else}
+        ; Try other common distribution names
+        nsExec::ExecToStack 'wsl -d Ubuntu -- claude --version 2>/dev/null'
+        Pop $0
+        ${If} $0 == 0
+          Pop $4 ; Ubuntu Version
+          SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Claude Code in WSL (Ubuntu): $4"
+          StrCpy $5 "true"
+          StrCpy $6 "WSL-Ubuntu"
+          StrCpy $ClaudeStatus "$4 (WSL-Ubuntu)"
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
   
-  ${NSD_SetText} $DependencyStatusLabel "Dependency scan completed. Review results above."
+  ${If} $5 == "true"
+    StrCpy $SkipClaude "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Claude Code detected in $6 - installation not needed!"
+  ${Else}
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Claude Code not found in Windows, WSL, Debian, or Ubuntu"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   💡 Will install Claude Code in Alpine Linux"
+    StrCpy $SkipClaude "false"
+  ${EndIf}
 FunctionEnd
 
 Function ProcessDependencyResults
-  ; Calculate installation time estimate
+  ; Calculate what needs to be installed
   StrCpy $0 0 ; Component counter
+  StrCpy $7 "" ; Components list
+  StrCpy $8 "" ; Found components list
   
+  ; Count and list what needs installation
   ${If} $SkipWSL2 == "false"
     IntOp $0 $0 + 1
+    StrCpy $7 "$7• WSL2 and kernel updates$\n"
+  ${Else}
+    StrCpy $8 "$8• WSL2 (already installed)$\n"
   ${EndIf}
+  
   ${If} $SkipNodeJS == "false"
     IntOp $0 $0 + 1
+    StrCpy $7 "$7• Node.js runtime$\n"
+  ${Else}
+    StrCpy $8 "$8• Node.js ($NodeJSStatus)$\n"
   ${EndIf}
+  
+  ${If} $SkipGit == "false"
+    StrCpy $7 "$7• Git version control$\n"
+  ${Else}
+    StrCpy $8 "$8• Git ($GitStatus)$\n"
+  ${EndIf}
+  
+  ${If} $SkipCurl == "false"
+    StrCpy $7 "$7• Curl download tool$\n"
+  ${Else}
+    StrCpy $8 "$8• Curl ($CurlStatus)$\n"
+  ${EndIf}
+  
   ${If} $SkipClaude == "false"
     IntOp $0 $0 + 1
+    StrCpy $7 "$7• Claude Code CLI$\n"
+  ${Else}
+    StrCpy $8 "$8• Claude Code ($ClaudeStatus)$\n"
   ${EndIf}
   
-  ; Estimate 3 minutes per component + base time
-  IntOp $1 $0 * 3
-  IntOp $1 $1 + 2
+  ; Always need Alpine Linux for consistent environment
+  ${If} $SkipWSL2 == "false"
+    StrCpy $7 "$7• Alpine Linux distribution$\n"
+  ${Else}
+    IntOp $0 $0 + 1
+    StrCpy $7 "$7• Alpine Linux distribution$\n"
+  ${EndIf}
   
-  IntOp $2 $1 + 3
-  MessageBox MB_YESNO|MB_ICONQUESTION "Ready to install Claude Code.$\n$\nComponents to install: $0$\nEstimated time: $1-$2 minutes$\n$\nContinue with installation?" IDYES +2
+  ; Calculate time estimate
+  IntOp $1 $0 * 3  ; 3 minutes per major component
+  IntOp $1 $1 + 2  ; Base overhead time
+  IntOp $2 $1 + 3  ; Upper time estimate
+  
+  ; Create comprehensive installation dialog
+  StrCpy $9 "Claude Code Installation Summary$\n$\n"
+  
+  ${If} $8 != ""
+    StrCpy $9 "$9✅ Found existing components:$\n$8$\n"
+  ${EndIf}
+  
+  ${If} $0 > 0
+    StrCpy $9 "$9📦 Components to install:$\n$7$\n"
+    StrCpy $9 "$9⏱️ Estimated time: $1-$2 minutes$\n"
+    ${If} $SkipWSL2 == "false"
+      StrCpy $9 "$9⚠️  System reboot may be required for WSL2$\n"
+    ${EndIf}
+  ${Else}
+    StrCpy $9 "$9🎉 All components already installed!$\n$\n"
+    StrCpy $9 "$9The installer will verify configuration and$\n"
+    StrCpy $9 "$9create shortcuts for easy access.$\n$\n"
+    StrCpy $9 "$9⏱️ Estimated time: 1-2 minutes$\n"
+  ${EndIf}
+  
+  StrCpy $9 "$9$\nContinue with installation?"
+  
+  MessageBox MB_YESNO|MB_ICONQUESTION "$9" IDYES +2
   Abort
 FunctionEnd
 
