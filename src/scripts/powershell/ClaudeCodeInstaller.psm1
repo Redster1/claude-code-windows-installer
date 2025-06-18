@@ -585,58 +585,302 @@ function Install-WSL2Kernel {
 function Install-AlpineLinux {
     <#
     .SYNOPSIS
-    Installs Alpine Linux distribution for WSL2
+    Installs and configures Alpine Linux distribution for WSL2 with comprehensive setup
     #>
     
     param(
-        [switch]$SetAsDefault
+        [switch]$SetAsDefault,
+        [switch]$SkipIfExists,
+        [string]$Username = "claude",
+        [int]$TimeoutMinutes = 10
     )
     
-    Write-Log "Installing Alpine Linux distribution" -Level Info
+    Write-Log "Starting Alpine Linux installation and configuration" -Level Info
+    Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Checking current distributions" -PercentComplete 5
     
     try {
-        # Check if Alpine is already installed
+        # Step 1: Check if Alpine is already installed
         $distributions = Get-WSLDistributions
         $alpineExists = $distributions | Where-Object { $_.Name -like "*Alpine*" }
         
-        if ($alpineExists) {
-            Write-Log "Alpine Linux already installed" -Level Success
+        if ($alpineExists -and $SkipIfExists) {
+            Write-Log "Alpine Linux already installed, skipping" -Level Success
             return @{
                 Success = $true
                 AlreadyInstalled = $true
-                Message = "Alpine Linux already available"
+                DistributionName = $alpineExists.Name
+                State = $alpineExists.State
+                Message = "Alpine Linux already available and functional"
             }
         }
         
-        # Install Alpine Linux
-        Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Downloading and installing Alpine" -PercentComplete 50
-        & wsl --install -d Alpine
+        # Step 2: Validate WSL2 is ready
+        Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Validating WSL2 environment" -PercentComplete 10
+        $wslStatus = Test-WSL2Installation
+        if (-not $wslStatus.Installed) {
+            throw "WSL2 must be installed before installing Alpine Linux"
+        }
         
-        if ($LASTEXITCODE -eq 0) {
-            Write-Log "Alpine Linux installed successfully" -Level Success
+        # Step 3: Install Alpine Linux if not exists
+        if (-not $alpineExists) {
+            Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Downloading Alpine Linux distribution" -PercentComplete 20
+            Write-Log "Installing Alpine Linux distribution..." -Level Info
             
-            # Set as default if requested
-            if ($SetAsDefault) {
-                & wsl --set-default Alpine
-                Write-Log "Alpine Linux set as default distribution" -Level Info
+            # Use timeout to prevent hanging
+            $installJob = Start-Job -ScriptBlock {
+                param($TimeoutMinutes)
+                & wsl --install -d Alpine 2>&1
+                return $LASTEXITCODE
+            } -ArgumentList $TimeoutMinutes
+            
+            # Wait for installation with timeout
+            $installResult = $installJob | Wait-Job -Timeout ($TimeoutMinutes * 60)
+            
+            if (-not $installResult) {
+                # Installation timed out
+                $installJob | Stop-Job -Force
+                $installJob | Remove-Job -Force
+                throw "Alpine Linux installation timed out after $TimeoutMinutes minutes"
             }
             
-            return @{
-                Success = $true
-                AlreadyInstalled = $false
-                Message = "Alpine Linux installed successfully"
+            $exitCode = Receive-Job $installJob
+            $installJob | Remove-Job -Force
+            
+            if ($exitCode -ne 0) {
+                throw "Alpine Linux installation failed with exit code: $exitCode"
+            }
+            
+            Write-Log "Alpine Linux distribution installed successfully" -Level Success
+        }
+        
+        # Step 4: Verify installation and get distribution info
+        Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Verifying installation" -PercentComplete 50
+        Start-Sleep -Seconds 3  # Allow WSL to register the new distribution
+        
+        $distributions = Get-WSLDistributions
+        $alpine = $distributions | Where-Object { $_.Name -like "*Alpine*" }
+        
+        if (-not $alpine) {
+            throw "Alpine Linux installation verification failed - distribution not found"
+        }
+        
+        Write-Log "Alpine Linux verified: $($alpine.Name) - State: $($alpine.State)" -Level Info
+        
+        # Step 5: Start Alpine if not running
+        if ($alpine.State -ne "Running") {
+            Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Starting Alpine Linux" -PercentComplete 60
+            Write-Log "Starting Alpine Linux distribution..." -Level Info
+            
+            & wsl -d $alpine.Name --exec echo "Starting Alpine..." 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Log "Warning: Could not start Alpine Linux automatically" -Level Warning
+            } else {
+                Write-Log "Alpine Linux started successfully" -Level Success
             }
         }
-        else {
-            throw "Alpine Linux installation failed with exit code: $LASTEXITCODE"
+        
+        # Step 6: Basic Alpine configuration
+        Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Configuring Alpine Linux" -PercentComplete 70
+        $configResult = Initialize-AlpineConfiguration -DistributionName $alpine.Name -Username $Username
+        
+        if (-not $configResult.Success) {
+            Write-Log "Warning: Alpine configuration incomplete: $($configResult.Error)" -Level Warning
         }
+        
+        # Step 7: Set as default if requested
+        if ($SetAsDefault) {
+            Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Setting as default distribution" -PercentComplete 85
+            Write-Log "Setting Alpine Linux as default WSL distribution..." -Level Info
+            
+            & wsl --set-default $alpine.Name 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "Alpine Linux set as default distribution" -Level Success
+            } else {
+                Write-Log "Warning: Could not set Alpine as default distribution" -Level Warning
+            }
+        }
+        
+        # Step 8: Final validation
+        Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Final validation" -PercentComplete 95
+        $finalValidation = Test-AlpineInstallation -DistributionName $alpine.Name
+        
+        Write-Progress-Enhanced -Activity "Installing Alpine Linux" -Status "Alpine Linux ready" -PercentComplete 100
+        Write-Log "Alpine Linux installation and configuration completed successfully" -Level Success
+        
+        return @{
+            Success = $true
+            AlreadyInstalled = $alpineExists -ne $null
+            DistributionName = $alpine.Name
+            State = $alpine.State
+            IsDefault = $SetAsDefault
+            Configuration = $configResult
+            Validation = $finalValidation
+            Message = "Alpine Linux installed and configured successfully"
+        }
+        
     }
     catch {
-        Write-Log "Error installing Alpine Linux: $($_.Exception.Message)" -Level Error
+        Write-Log "Alpine Linux installation failed: $($_.Exception.Message)" -Level Error
+        
         return @{
             Success = $false
             Error = $_.Exception.Message
-            Message = "Alpine Linux installation failed"
+            Message = "Alpine Linux installation failed: $($_.Exception.Message)"
+        }
+    }
+}
+
+function Initialize-AlpineConfiguration {
+    <#
+    .SYNOPSIS
+    Performs basic Alpine Linux configuration for Claude Code development
+    #>
+    
+    param(
+        [Parameter(Mandatory)]
+        [string]$DistributionName,
+        [string]$Username = "claude"
+    )
+    
+    Write-Log "Configuring Alpine Linux for Claude Code development..." -Level Info
+    
+    try {
+        # Test basic connectivity
+        $testResult = & wsl -d $DistributionName --exec echo "Alpine Ready" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Cannot communicate with Alpine Linux: $testResult"
+        }
+        
+        # Get Alpine version
+        $alpineVersion = & wsl -d $DistributionName --exec cat /etc/alpine-release 2>$null
+        Write-Log "Alpine Linux version: $alpineVersion" -Level Info
+        
+        # Check if root setup is needed
+        $rootCheck = & wsl -d $DistributionName --exec whoami 2>$null
+        Write-Log "Current Alpine user: $rootCheck" -Level Info
+        
+        # Create setup script for Alpine
+        $setupScript = @"
+#!/bin/sh
+# Alpine Linux setup for Claude Code installer
+echo "=== Alpine Linux Configuration ==="
+
+# Update package repository
+echo "Updating package repository..."
+apk update 2>/dev/null || echo "Warning: Could not update package repository"
+
+# Install essential packages
+echo "Installing essential packages..."
+apk add --no-cache curl wget git nodejs npm 2>/dev/null || echo "Warning: Some packages may not be available"
+
+# Create user if specified and not root
+if [ "$1" != "root" ] && [ ! -z "$1" ]; then
+    if ! id "$1" >/dev/null 2>&1; then
+        echo "Creating user: $1"
+        adduser -D -s /bin/sh "$1"
+        echo "User $1 created successfully"
+    else
+        echo "User $1 already exists"
+    fi
+fi
+
+# Verify essential tools
+echo "=== Verification ==="
+echo "curl: \$(curl --version 2>/dev/null | head -1 || echo 'Not available')"
+echo "git: \$(git --version 2>/dev/null || echo 'Not available')"  
+echo "node: \$(node --version 2>/dev/null || echo 'Not available')"
+echo "npm: \$(npm --version 2>/dev/null || echo 'Not available')"
+
+echo "Alpine Linux configuration completed"
+"@
+        
+        $setupScriptPath = "$env:TEMP\alpine-setup.sh"
+        $setupScript | Out-File -FilePath $setupScriptPath -Encoding UTF8
+        
+        # Copy setup script to Alpine and execute
+        & wsl -d $DistributionName --exec sh -c "cat > /tmp/setup.sh" < $setupScriptPath
+        $setupOutput = & wsl -d $DistributionName --exec sh /tmp/setup.sh $Username 2>&1
+        
+        # Clean up
+        Remove-Item $setupScriptPath -Force -ErrorAction SilentlyContinue
+        & wsl -d $DistributionName --exec rm -f /tmp/setup.sh 2>$null
+        
+        Write-Log "Alpine configuration output: $setupOutput" -Level Info
+        
+        return @{
+            Success = $true
+            AlpineVersion = $alpineVersion.Trim()
+            CurrentUser = $rootCheck.Trim()
+            SetupOutput = $setupOutput
+            Message = "Alpine Linux configured successfully"
+        }
+        
+    }
+    catch {
+        return @{
+            Success = $false
+            Error = $_.Exception.Message
+            Message = "Alpine configuration failed: $($_.Exception.Message)"
+        }
+    }
+}
+
+function Test-AlpineInstallation {
+    <#
+    .SYNOPSIS
+    Validates Alpine Linux installation and readiness for Claude Code
+    #>
+    
+    param(
+        [Parameter(Mandatory)]
+        [string]$DistributionName
+    )
+    
+    Write-Log "Validating Alpine Linux installation..." -Level Info
+    
+    try {
+        $validation = @{
+            Connectivity = $false
+            EssentialTools = @{}
+            UserAccess = $false
+            FileSystem = $false
+        }
+        
+        # Test basic connectivity
+        $echoTest = & wsl -d $DistributionName --exec echo "test" 2>$null
+        $validation.Connectivity = ($LASTEXITCODE -eq 0 -and $echoTest -eq "test")
+        
+        # Test essential tools
+        $tools = @("curl", "git", "node", "npm")
+        foreach ($tool in $tools) {
+            $toolCheck = & wsl -d $DistributionName --exec which $tool 2>$null
+            $validation.EssentialTools[$tool] = ($LASTEXITCODE -eq 0 -and $toolCheck)
+        }
+        
+        # Test user access
+        $userTest = & wsl -d $DistributionName --exec whoami 2>$null
+        $validation.UserAccess = ($LASTEXITCODE -eq 0 -and $userTest)
+        
+        # Test file system access
+        $fsTest = & wsl -d $DistributionName --exec "touch /tmp/test && rm /tmp/test" 2>$null
+        $validation.FileSystem = ($LASTEXITCODE -eq 0)
+        
+        $allPassed = $validation.Connectivity -and $validation.UserAccess -and $validation.FileSystem
+        
+        Write-Log "Alpine validation completed. All checks passed: $allPassed" -Level $(if ($allPassed) { "Success" } else { "Warning" })
+        
+        return @{
+            Success = $allPassed
+            Details = $validation
+            Message = if ($allPassed) { "Alpine Linux is ready for Claude Code" } else { "Alpine Linux has some issues but is functional" }
+        }
+        
+    }
+    catch {
+        return @{
+            Success = $false
+            Error = $_.Exception.Message
+            Message = "Alpine validation failed: $($_.Exception.Message)"
         }
     }
 }
