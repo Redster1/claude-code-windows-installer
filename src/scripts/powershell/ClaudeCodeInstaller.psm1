@@ -336,56 +336,215 @@ function Get-WSLDistributions {
 function Install-WSL2 {
     <#
     .SYNOPSIS
-    Installs and configures WSL2
+    Installs and configures WSL2 with comprehensive error handling and reboot management
     #>
     
     param(
-        [switch]$SkipIfExists
+        [switch]$SkipIfExists,
+        [switch]$AutoReboot,
+        [string]$ContinuationPhase = "PostWSLReboot"
     )
     
     Write-Log "Starting WSL2 installation" -Level Info
-    Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Checking current status" -PercentComplete 10
+    Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Checking current status" -PercentComplete 5
+    
+    # Pre-installation validation
+    $systemCheck = Test-WSL2Prerequisites
+    if (-not $systemCheck.Passed) {
+        throw "System prerequisites not met: $($systemCheck.Message)"
+    }
     
     # Check if already installed
     $wslStatus = Test-WSL2Installation
     if ($wslStatus.Installed -and $SkipIfExists) {
         Write-Log "WSL2 already installed, skipping" -Level Success
-        return $wslStatus
+        return @{
+            Success = $true
+            AlreadyInstalled = $true
+            RebootRequired = $false
+            Message = "WSL2 already installed and functional"
+        }
     }
     
+    $installationSteps = @()
+    $rebootRequired = $false
+    
     try {
-        # Step 1: Enable WSL feature
-        Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Enabling Windows Subsystem for Linux" -PercentComplete 20
-        $wslFeature = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart
+        # Step 1: Check and enable WSL feature
+        Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Checking WSL feature status" -PercentComplete 15
+        $wslFeatureStatus = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
         
-        # Step 2: Enable Virtual Machine Platform
-        Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Enabling Virtual Machine Platform" -PercentComplete 40
-        $vmFeature = Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart
+        if ($wslFeatureStatus.State -ne "Enabled") {
+            Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Enabling Windows Subsystem for Linux" -PercentComplete 25
+            Write-Log "Enabling WSL feature..." -Level Info
+            
+            $wslFeature = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart
+            $installationSteps += "WSL Feature Enabled"
+            
+            if ($wslFeature.RestartNeeded) {
+                $rebootRequired = $true
+                Write-Log "WSL feature enabled - reboot required" -Level Warning
+            }
+        } else {
+            Write-Log "WSL feature already enabled" -Level Info
+        }
         
-        # Step 3: Download and install WSL2 kernel
-        Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Downloading WSL2 kernel update" -PercentComplete 60
+        # Step 2: Check and enable Virtual Machine Platform
+        Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Checking Virtual Machine Platform" -PercentComplete 35
+        $vmFeatureStatus = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
+        
+        if ($vmFeatureStatus.State -ne "Enabled") {
+            Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Enabling Virtual Machine Platform" -PercentComplete 45
+            Write-Log "Enabling Virtual Machine Platform..." -Level Info
+            
+            $vmFeature = Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart
+            $installationSteps += "Virtual Machine Platform Enabled"
+            
+            if ($vmFeature.RestartNeeded) {
+                $rebootRequired = $true
+                Write-Log "Virtual Machine Platform enabled - reboot required" -Level Warning
+            }
+        } else {
+            Write-Log "Virtual Machine Platform already enabled" -Level Info
+        }
+        
+        # Step 3: Handle reboot if required for features
+        if ($rebootRequired) {
+            Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Features enabled - reboot required" -PercentComplete 50
+            Write-Log "WSL2 features enabled successfully. Reboot required to continue." -Level Info
+            
+            if ($AutoReboot) {
+                return Request-RebootWithContinuation -ContinuationPhase $ContinuationPhase -InstallationSteps $installationSteps
+            } else {
+                return @{
+                    Success = $true
+                    RebootRequired = $true
+                    RebootReason = "WSL2 features enabled"
+                    InstallationSteps = $installationSteps
+                    Message = "WSL2 features enabled. Please reboot and run installer again."
+                    NextPhase = $ContinuationPhase
+                }
+            }
+        }
+        
+        # Step 4: Download and install WSL2 kernel (only if no reboot needed)
+        Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Installing WSL2 kernel update" -PercentComplete 65
         $kernelResult = Install-WSL2Kernel
+        if (-not $kernelResult.Success) {
+            throw "WSL2 kernel installation failed: $($kernelResult.Error)"
+        }
+        $installationSteps += "WSL2 Kernel Installed"
         
-        # Step 4: Set WSL2 as default
+        # Step 5: Set WSL2 as default version
         Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Setting WSL2 as default version" -PercentComplete 80
-        & wsl --set-default-version 2
+        Write-Log "Setting WSL2 as default version..." -Level Info
         
-        # Check if reboot is required
-        $rebootRequired = $wslFeature.RestartNeeded -or $vmFeature.RestartNeeded
+        $setDefaultResult = & wsl --set-default-version 2 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "WSL2 set as default version" -Level Success
+            $installationSteps += "WSL2 Set as Default"
+        } else {
+            Write-Log "Warning: Could not set WSL2 as default version: $setDefaultResult" -Level Warning
+        }
         
-        Write-Progress-Enhanced -Activity "Installing WSL2" -Status "WSL2 installation completed" -PercentComplete 100
+        # Step 6: Final validation
+        Write-Progress-Enhanced -Activity "Installing WSL2" -Status "Validating installation" -PercentComplete 90
+        Start-Sleep -Seconds 2  # Allow services to initialize
+        
+        $finalStatus = Test-WSL2Installation
+        if (-not $finalStatus.Installed) {
+            throw "WSL2 installation validation failed"
+        }
+        
+        Write-Progress-Enhanced -Activity "Installing WSL2" -Status "WSL2 installation completed successfully" -PercentComplete 100
         Write-Log "WSL2 installation completed successfully" -Level Success
         
         return @{
             Success = $true
-            RebootRequired = $rebootRequired
+            RebootRequired = $false
+            InstallationSteps = $installationSteps
             KernelInstalled = $kernelResult.Success
-            Message = if ($rebootRequired) { "WSL2 installed successfully. Reboot required." } else { "WSL2 installed successfully." }
+            Version = $finalStatus.Version
+            Message = "WSL2 installed and configured successfully"
         }
     }
     catch {
         Write-Log "WSL2 installation failed: $($_.Exception.Message)" -Level Error
-        throw
+        
+        # Attempt rollback of any partial installation
+        if ($installationSteps.Count -gt 0) {
+            Write-Log "Attempting to rollback partial installation..." -Level Warning
+            # Note: Rolling back Windows features is complex and may require reboot
+            # We'll log the issue for manual intervention
+            Write-Log "Manual intervention may be required. Steps completed: $($installationSteps -join ', ')" -Level Warning
+        }
+        
+        return @{
+            Success = $false
+            Error = $_.Exception.Message
+            InstallationSteps = $installationSteps
+            Message = "WSL2 installation failed: $($_.Exception.Message)"
+        }
+    }
+}
+
+function Test-WSL2Prerequisites {
+    <#
+    .SYNOPSIS
+    Validates system prerequisites for WSL2 installation
+    #>
+    
+    Write-Log "Checking WSL2 prerequisites..." -Level Info
+    
+    $issues = @()
+    
+    # Check Windows version
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem
+    $buildNumber = [int]$os.BuildNumber
+    
+    if ($buildNumber -lt 19041) {
+        $issues += "Windows build $buildNumber is too old. WSL2 requires build 19041 or newer."
+    }
+    
+    # Check architecture
+    if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
+        $issues += "WSL2 requires 64-bit Windows (AMD64 architecture)"
+    }
+    
+    # Check Hyper-V support
+    $hyperVCheck = Test-HyperVSupport
+    if (-not $hyperVCheck.Passed) {
+        $issues += $hyperVCheck.Message
+    }
+    
+    # Check admin rights
+    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        $issues += "Administrator privileges required for WSL2 installation"
+    }
+    
+    # Check disk space
+    $systemDrive = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $env:SystemDrive }
+    $freeSpaceGB = [math]::Round($systemDrive.FreeSpace / 1GB, 2)
+    
+    if ($freeSpaceGB -lt 2) {
+        $issues += "Insufficient disk space. At least 2GB required, $freeSpaceGB GB available"
+    }
+    
+    $passed = $issues.Count -eq 0
+    $message = if ($passed) { "All WSL2 prerequisites met" } else { $issues -join "; " }
+    
+    Write-Log "Prerequisites check: $message" -Level $(if ($passed) { "Info" } else { "Warning" })
+    
+    return @{
+        Passed = $passed
+        Issues = $issues
+        Message = $message
+        Details = @{
+            WindowsBuild = $buildNumber
+            Architecture = $env:PROCESSOR_ARCHITECTURE
+            DiskSpaceGB = $freeSpaceGB
+            IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+        }
     }
 }
 
@@ -514,44 +673,185 @@ function Test-RebootRequired {
 function Request-RebootWithContinuation {
     <#
     .SYNOPSIS
-    Schedules installer continuation after reboot
+    Schedules installer continuation after reboot with state preservation
     #>
     
     param(
         [string]$InstallerPath,
-        [string]$ContinuationPhase = "PostReboot"
+        [string]$ContinuationPhase = "PostReboot",
+        [array]$InstallationSteps = @()
     )
     
     Write-Log "Scheduling installer continuation after reboot" -Level Info
     
-    # Create continuation script
+    # Save installation state
+    $stateFile = "$env:TEMP\ClaudeCodeInstaller-State.json"
+    $installationState = @{
+        Phase = $ContinuationPhase
+        CompletedSteps = $InstallationSteps
+        Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        RebootReason = "WSL2 features installation"
+        NextActions = @("Complete WSL2 kernel installation", "Install Alpine Linux", "Configure Claude Code")
+    }
+    
+    try {
+        $installationState | ConvertTo-Json -Depth 3 | Out-File -FilePath $stateFile -Encoding UTF8
+        Write-Log "Installation state saved to $stateFile" -Level Info
+    }
+    catch {
+        Write-Log "Warning: Could not save installation state: $($_.Exception.Message)" -Level Warning
+    }
+    
+    # Create enhanced continuation script
     $continuationScript = @"
 # Claude Code Installer - Post-Reboot Continuation
-Write-Host "Resuming Claude Code installation after reboot..."
-Start-Process -FilePath "$InstallerPath" -ArgumentList "/PHASE=$ContinuationPhase" -Wait
+# Auto-generated on $(Get-Date)
+
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
+
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host "Claude Code Installer - Resuming Installation" -ForegroundColor Cyan
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host ""
+
+try {
+    # Load installation state
+    if (Test-Path "$stateFile") {
+        `$state = Get-Content "$stateFile" -Raw | ConvertFrom-Json
+        Write-Host "Resuming from phase: `$(`$state.Phase)" -ForegroundColor Green
+        Write-Host "Completed steps: `$(`$state.CompletedSteps -join ', ')" -ForegroundColor Green
+        Write-Host ""
+    }
+    
+    # Launch installer with continuation phase
+    Write-Host "Launching installer continuation..." -ForegroundColor Yellow
+    Start-Process -FilePath "$InstallerPath" -ArgumentList "/PHASE=$ContinuationPhase", "/SILENT" -Wait
+    
+    Write-Host "Installation continuation completed." -ForegroundColor Green
+}
+catch {
+    Write-Host "Error during installation continuation: `$(`$_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Please run the installer manually." -ForegroundColor Yellow
+    Read-Host "Press Enter to continue"
+}
+
+# Clean up scheduled task
+try {
+    Unregister-ScheduledTask -TaskName "ClaudeCodeInstaller-PostReboot" -Confirm:`$false -ErrorAction SilentlyContinue
+}
+catch {
+    # Task cleanup failed, but continue
+}
 "@
     
     $continuationPath = "$env:TEMP\ClaudeCodeInstaller-PostReboot.ps1"
     $continuationScript | Out-File -FilePath $continuationPath -Encoding UTF8
     
-    # Schedule task to run after reboot
+    # Schedule task to run after reboot with enhanced configuration
     $taskName = "ClaudeCodeInstaller-PostReboot"
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$continuationPath`""
-    $trigger = New-ScheduledTaskTrigger -AtStartup
-    $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
     
-    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force
+    try {
+        # Remove existing task if it exists
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        
+        # Create new scheduled task
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Normal -File `"$continuationPath`""
+        $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+        $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+        
+        Write-Log "Post-reboot continuation scheduled successfully" -Level Success
+        
+        return @{
+            Success = $true
+            RebootRequired = $true
+            RebootReason = "WSL2 features enabled - restart required"
+            ContinuationScheduled = $true
+            StateFile = $stateFile
+            ContinuationScript = $continuationPath
+            Message = "System will restart and automatically continue installation. Reboot now?"
+        }
+        
+    }
+    catch {
+        Write-Log "Error scheduling post-reboot continuation: $($_.Exception.Message)" -Level Error
+        
+        return @{
+            Success = $false
+            RebootRequired = $true
+            RebootReason = "WSL2 features enabled - restart required"
+            ContinuationScheduled = $false
+            Error = $_.Exception.Message
+            Message = "Reboot required, but automatic continuation could not be scheduled. Please run installer manually after reboot."
+        }
+}
+
+function Get-InstallationState {
+    <#
+    .SYNOPSIS
+    Loads saved installation state after reboot
+    #>
     
-    Write-Log "Post-reboot continuation scheduled" -Level Success
+    $stateFile = "$env:TEMP\ClaudeCodeInstaller-State.json"
     
-    # Prompt user for reboot
-    $rebootChoice = Read-Host "A reboot is required to continue installation. Reboot now? (Y/N)"
-    if ($rebootChoice -eq 'Y' -or $rebootChoice -eq 'y') {
-        Write-Log "Initiating system reboot" -Level Info
-        Restart-Computer -Force
+    if (Test-Path $stateFile) {
+        try {
+            $state = Get-Content $stateFile -Raw | ConvertFrom-Json
+            Write-Log "Installation state loaded: Phase $($state.Phase), Steps: $($state.CompletedSteps -join ', ')" -Level Info
+            return $state
+        }
+        catch {
+            Write-Log "Warning: Could not load installation state: $($_.Exception.Message)" -Level Warning
+            return $null
+        }
     }
     else {
-        Write-Log "Reboot postponed. Installation will continue after manual reboot." -Level Warning
+        Write-Log "No installation state file found" -Level Info
+        return $null
+    }
+}
+
+function Clear-InstallationState {
+    <#
+    .SYNOPSIS
+    Cleans up installation state files and scheduled tasks
+    #>
+    
+    $stateFile = "$env:TEMP\ClaudeCodeInstaller-State.json"
+    $continuationScript = "$env:TEMP\ClaudeCodeInstaller-PostReboot.ps1"
+    $taskName = "ClaudeCodeInstaller-PostReboot"
+    
+    # Remove state file
+    if (Test-Path $stateFile) {
+        try {
+            Remove-Item $stateFile -Force
+            Write-Log "Installation state file cleaned up" -Level Info
+        }
+        catch {
+            Write-Log "Warning: Could not remove state file: $($_.Exception.Message)" -Level Warning
+        }
+    }
+    
+    # Remove continuation script
+    if (Test-Path $continuationScript) {
+        try {
+            Remove-Item $continuationScript -Force
+            Write-Log "Continuation script cleaned up" -Level Info
+        }
+        catch {
+            Write-Log "Warning: Could not remove continuation script: $($_.Exception.Message)" -Level Warning
+        }
+    }
+    
+    # Remove scheduled task
+    try {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        Write-Log "Scheduled task cleaned up" -Level Info
+    }
+    catch {
+        Write-Log "Warning: Could not remove scheduled task: $($_.Exception.Message)" -Level Warning
     }
 }
 
