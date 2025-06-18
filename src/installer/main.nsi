@@ -30,14 +30,14 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 ; Modern UI Configuration
 !define MUI_ABORTWARNING
-; Assets commented out for testing
-; !define MUI_ICON "${ASSETS_DIR}\claude-icon.ico"
-; !define MUI_WELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}\wizard-sidebar.bmp" 
-; !define MUI_UNWELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}\wizard-sidebar.bmp"
+; Assets disabled temporarily due to file issues
+; !define MUI_ICON "${ASSETS_DIR}/claude-icon.ico"
+; !define MUI_WELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}/wizard-sidebar.bmp" 
+; !define MUI_UNWELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}/wizard-sidebar.bmp"
 
 ; Interface Settings
 ; !define MUI_HEADERIMAGE
-; !define MUI_HEADERIMAGE_BITMAP "${ASSETS_DIR}\wizard-header.bmp"
+; !define MUI_HEADERIMAGE_BITMAP "${ASSETS_DIR}/wizard-header.bmp"
 ; !define MUI_HEADERIMAGE_RIGHT
 
 ; Pages
@@ -168,40 +168,7 @@ Function CheckDependenciesAsync
 FunctionEnd
 
 Function CheckWSL2Comprehensive
-  ; Try PowerShell module first (most accurate) - use fallback path approach
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "try { $$ModulePath = Join-Path $$env:LOCALAPPDATA \"ClaudeCode\scripts\powershell\ClaudeCodeInstaller.psm1\"; if (Test-Path $$ModulePath) { Import-Module $$ModulePath -Force; Test-WSL2Installation | ConvertTo-Json -Compress } else { \"{}\" } } catch { \"{}\" }"'
-  Pop $0 ; Exit code
-  Pop $1 ; JSON result
-  
-  ${If} $0 == 0
-  ${AndIf} $1 != ""
-  ${AndIf} $1 != "{}"
-    ; Parse PowerShell JSON result
-    ${If} $1 != ""
-      ; Check if WSL2 is installed from JSON
-      nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "try { (\'$1\' | ConvertFrom-Json).Installed } catch { \'false\' }"'
-      Pop $0
-      Pop $2 ; Installed status
-      
-      ${If} $2 == "True"
-        ; Get version and distributions
-        nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "try { (\'$1\' | ConvertFrom-Json).Version } catch { \'Unknown\' }"'
-        Pop $0
-        Pop $3 ; Version
-        
-        nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "try { (\'$1\' | ConvertFrom-Json).Distributions.Count } catch { 0 }"'
-        Pop $0
-        Pop $4 ; Distribution count
-        
-        SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ WSL2 installed: Version $3"
-        SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   📋 Found $4 WSL distribution(s)"
-        StrCpy $SkipWSL2 "true"
-        Return
-      ${EndIf}
-    ${EndIf}
-  ${EndIf}
-  
-  ; Fallback to direct WSL check
+  ; Direct WSL check (don't assume PowerShell modules exist on fresh install)
   nsExec::ExecToStack 'wsl --status 2>nul'
   Pop $0
   ${If} $0 == 0
@@ -504,9 +471,13 @@ Section "Claude Code Installation" SecMain
   ; Initialize installation
   DetailPrint "Starting Claude Code installation"
   
-  ; Extract installer files (commented out for testing)
-  ; File /r "${BUILD_DIR}/scripts/*"
-  ; File /r "${BUILD_DIR}/config/*"
+  ; File extraction disabled temporarily for testing functionality
+  ; Extract installer files
+  ; SetOutPath "$INSTDIR"  
+  ; File /r "${BUILD_DIR}/*"
+  
+  ; Assets disabled temporarily
+  ; File "${ASSETS_DIR}/claude-icon.ico"
   
   ; Start installation process
   Call PerformInstallation
@@ -523,30 +494,217 @@ Section "Claude Code Installation" SecMain
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "NoRepair" 1
   
-  ; Create shortcuts (commented out for testing)
-  ; Call CreateShortcuts
+  ; Create shortcuts
+  Call CreateShortcuts
   
 SectionEnd
 
 ; Installation functions
 Function PerformInstallation
-  ; Update progress page
+  ; Initialize progress
   ${NSD_SetText} $ProgressStatusLabel "Installing Claude Code components..."
-  ${NSD_SetText} $CurrentOperation "Simulating installation for testing..."
+  ${NSD_SetText} $CurrentOperation "Starting installation..."
+  SendMessage $ProgressBar ${PBM_SETPOS} 5 0
+  
+  DetailPrint "Starting Claude Code installation on fresh Windows system"
+  
+  ; Step 1: Install WSL2 if needed (30% of progress)
+  ${If} $SkipWSL2 == "false"
+    ${NSD_SetText} $CurrentOperation "Installing WSL2..."
+    SendMessage $ProgressBar ${PBM_SETPOS} 10 0
+    Call InstallWSL2Features
+    SendMessage $ProgressBar ${PBM_SETPOS} 30 0
+  ${Else}
+    DetailPrint "WSL2 already installed, skipping"
+    SendMessage $ProgressBar ${PBM_SETPOS} 30 0
+  ${EndIf}
+  
+  ; Step 2: Install Alpine Linux distribution (20% of progress)
+  ${NSD_SetText} $CurrentOperation "Setting up Alpine Linux..."
+  SendMessage $ProgressBar ${PBM_SETPOS} 40 0
+  Call InstallAlpineLinux
   SendMessage $ProgressBar ${PBM_SETPOS} 50 0
   
-  DetailPrint "Installation simulation - UI testing mode"
-  DetailPrint "This is a test build to validate the UI"
-  DetailPrint "Full automation will be enabled in production build"
+  ; Step 3: Install Node.js in Alpine if needed (20% of progress)
+  ${If} $SkipNodeJS == "false"
+    ${NSD_SetText} $CurrentOperation "Installing Node.js in Alpine Linux..."
+    SendMessage $ProgressBar ${PBM_SETPOS} 60 0
+    Call InstallNodeJSInAlpine
+    SendMessage $ProgressBar ${PBM_SETPOS} 70 0
+  ${Else}
+    DetailPrint "Compatible Node.js found, skipping installation"
+    SendMessage $ProgressBar ${PBM_SETPOS} 70 0
+  ${EndIf}
   
-  ; Complete progress
+  ; Step 4: Install Claude Code CLI (20% of progress)
+  ${If} $SkipClaude == "false"
+    ${NSD_SetText} $CurrentOperation "Installing Claude Code CLI..."
+    SendMessage $ProgressBar ${PBM_SETPOS} 80 0
+    Call InstallClaudeCodeCLI
+    SendMessage $ProgressBar ${PBM_SETPOS} 90 0
+  ${Else}
+    DetailPrint "Claude Code already installed, skipping"
+    SendMessage $ProgressBar ${PBM_SETPOS} 90 0
+  ${EndIf}
+  
+  ; Step 5: Create Windows shortcuts and finalize (10% of progress)
+  ${NSD_SetText} $CurrentOperation "Creating shortcuts and finalizing..."
+  SendMessage $ProgressBar ${PBM_SETPOS} 95 0
+  Call CreateShortcuts
+  
+  ; Complete installation
   ${NSD_SetText} $ProgressStatusLabel "Installation completed successfully!"
   ${NSD_SetText} $CurrentOperation "Claude Code is ready to use."
   SendMessage $ProgressBar ${PBM_SETPOS} 100 0
+  DetailPrint "Claude Code installation completed successfully"
 FunctionEnd
 
+; WSL2 Installation Function
+Function InstallWSL2Features
+  DetailPrint "Enabling WSL2 Windows features..."
+  
+  ; Enable WSL feature
+  nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -Command "Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart"'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Error enabling WSL feature: $0"
+    MessageBox MB_OK|MB_ICONSTOP "Failed to enable WSL feature. Error code: $0"
+    Abort
+  ${EndIf}
+  
+  ; Enable Virtual Machine Platform
+  nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -Command "Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart"'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Error enabling Virtual Machine Platform: $0"
+    MessageBox MB_OK|MB_ICONSTOP "Failed to enable Virtual Machine Platform. Error code: $0"
+    Abort
+  ${EndIf}
+  
+  ; Download and install WSL2 kernel update
+  DetailPrint "Downloading WSL2 kernel update..."
+  nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri \"https://wslstorestorage.blob.core.windows.net/wslblob/wsl_update_x64.msi\" -OutFile \"$TEMP\wsl_update_x64.msi\" -UseBasicParsing"'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Error downloading WSL2 kernel: $0"
+    MessageBox MB_OK|MB_ICONSTOP "Failed to download WSL2 kernel update. Check internet connection."
+    Abort
+  ${EndIf}
+  
+  ; Install WSL2 kernel update
+  DetailPrint "Installing WSL2 kernel update..."
+  nsExec::ExecToLog 'msiexec /i "$TEMP\wsl_update_x64.msi" /quiet /norestart'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Error installing WSL2 kernel: $0"
+    MessageBox MB_OK|MB_ICONSTOP "Failed to install WSL2 kernel update. Error code: $0"
+    Abort
+  ${EndIf}
+  
+  ; Set WSL2 as default version
+  nsExec::ExecToLog 'wsl --set-default-version 2'
+  Pop $0
+  
+  DetailPrint "WSL2 features installed successfully"
+  
+  ; Check if reboot is required
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "if (Test-Path \"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired\") { \"true\" } else { \"false\" }"'
+  Pop $0
+  Pop $1
+  ${If} $1 == "true"
+    StrCpy $RebootRequired "true"
+    DetailPrint "System reboot will be required"
+  ${EndIf}
+FunctionEnd
+
+; Alpine Linux Installation Function
+Function InstallAlpineLinux
+  DetailPrint "Installing Alpine Linux distribution..."
+  
+  ; Install Alpine Linux
+  nsExec::ExecToLog 'wsl --install -d Alpine'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Error installing Alpine Linux: $0"
+    ; Try alternative method
+    DetailPrint "Trying alternative Alpine installation..."
+    nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri \"https://github.com/yuk7/AlpineWSL/releases/latest/download/Alpine.zip\" -OutFile \"$TEMP\Alpine.zip\" -UseBasicParsing; Expand-Archive \"$TEMP\Alpine.zip\" \"$TEMP\Alpine\"; & \"$TEMP\Alpine\Alpine.exe\""'
+    Pop $0
+    ${If} $0 != 0
+      MessageBox MB_OK|MB_ICONSTOP "Failed to install Alpine Linux. Error code: $0"
+      Abort
+    ${EndIf}
+  ${EndIf}
+  
+  ; Set Alpine as default distribution
+  nsExec::ExecToLog 'wsl --set-default Alpine'
+  Pop $0
+  
+  DetailPrint "Alpine Linux installed successfully"
+FunctionEnd
+
+; Node.js Installation in Alpine Function
+Function InstallNodeJSInAlpine
+  DetailPrint "Installing Node.js in Alpine Linux..."
+  
+  ; Update Alpine package repositories and install Node.js
+  nsExec::ExecToLog 'wsl -d Alpine -- sh -c "apk update && apk add nodejs npm curl git bash"'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Error installing Node.js in Alpine: $0"
+    MessageBox MB_OK|MB_ICONSTOP "Failed to install Node.js in Alpine Linux. Error code: $0"
+    Abort
+  ${EndIf}
+  
+  ; Verify Node.js installation
+  nsExec::ExecToStack 'wsl -d Alpine -- node --version'
+  Pop $0
+  Pop $1
+  ${If} $0 == 0
+    DetailPrint "Node.js installed successfully: $1"
+  ${Else}
+    DetailPrint "Warning: Could not verify Node.js installation"
+  ${EndIf}
+FunctionEnd
+
+; Claude Code CLI Installation Function
+Function InstallClaudeCodeCLI
+  DetailPrint "Installing Claude Code CLI..."
+  
+  ; Install Claude Code CLI globally in Alpine
+  nsExec::ExecToLog 'wsl -d Alpine -- npm install -g @anthropic-ai/claude-code'
+  Pop $0
+  ${If} $0 != 0
+    DetailPrint "Error installing Claude Code CLI: $0"
+    MessageBox MB_OK|MB_ICONSTOP "Failed to install Claude Code CLI. Error code: $0"
+    Abort
+  ${EndIf}
+  
+  ; Verify Claude Code installation
+  nsExec::ExecToStack 'wsl -d Alpine -- claude --version'
+  Pop $0
+  Pop $1
+  ${If} $0 == 0
+    DetailPrint "Claude Code CLI installed successfully: $1"
+  ${Else}
+    DetailPrint "Warning: Could not verify Claude Code installation"
+  ${EndIf}
+FunctionEnd
+
+; Windows Shortcuts Creation Function
 Function CreateShortcuts
-  DetailPrint "Creating shortcuts..."
+  DetailPrint "Creating Windows shortcuts..."
+  
+  ; Create desktop shortcut
+  CreateShortCut "$DESKTOP\Claude Code.lnk" "wsl" "-d Alpine -- claude"
+  
+  ; Create Start Menu shortcuts
+  CreateDirectory "$SMPROGRAMS\Claude Code"
+  CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code.lnk" "wsl" "-d Alpine -- claude"
+  CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code Terminal.lnk" "wsl" "-d Alpine"
+  CreateShortCut "$SMPROGRAMS\Claude Code\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
+  
+  DetailPrint "Shortcuts created successfully"
 FunctionEnd
 
 ; Uninstaller section
