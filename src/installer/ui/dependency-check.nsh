@@ -113,7 +113,9 @@ Function CheckWindowsVersion
     SendMessage $DependencyList ${LB_ADDSTRING} 0 "STR:🔄 Checking Windows version..."
     
     ; Update progress (Step 1/5 = 20%)
-    Call UpdateProgress "Checking Windows version" "starting"
+    Push "starting"
+    Push "Checking Windows version"
+    Call UpdateProgress
     
     ; Run Windows version check
     nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\\scripts\\powershell\\ClaudeCodeInstaller.psm1\" -Force; $result = Test-WindowsVersion; if ($result.Passed) { Write-Output \"PASSED:Windows $($result.Version) (Build $($result.BuildNumber))\" } else { Write-Output \"FAILED:$($result.Message)\" }"'
@@ -126,17 +128,23 @@ Function CheckWindowsVersion
             StrCpy $2 $1 "" 7  ; Remove "PASSED:" prefix
             SendMessage $DependencyList ${LB_DELETESTRING} 0 0  ; Remove checking message
             SendMessage $DependencyList ${LB_ADDSTRING} 0 "STR:✅ Windows Version: $2"
-            Call UpdateProgress "Checking Windows version" "completed"
+            Push "completed"
+            Push "Checking Windows version"
+            Call UpdateProgress
         ${Else}
             StrCpy $2 $1 "" 7  ; Remove "FAILED:" prefix
             SendMessage $DependencyList ${LB_DELETESTRING} 0 0
             SendMessage $DependencyList ${LB_ADDSTRING} 0 "STR:❌ Windows Version: $2"
-            Call UpdateProgress "Checking Windows version" "failed"
+            Push "failed"
+            Push "Checking Windows version"
+            Call UpdateProgress
         ${EndIf}
     ${Else}
         SendMessage $DependencyList ${LB_DELETESTRING} 0 0
         SendMessage $DependencyList ${LB_ADDSTRING} 0 "STR:❌ Windows Version: Check failed"
-        Call UpdateProgress "Checking Windows version" "failed"
+        Push "failed"
+        Push "Checking Windows version"
+        Call UpdateProgress
     ${EndIf}
     
     ; Continue to next check
@@ -148,7 +156,9 @@ Function CheckAdminRights
     ${NSD_SetText} $StatusLabel "Checking administrator privileges..."
     SendMessage $DependencyList ${LB_ADDSTRING} 0 "STR:🔄 Checking administrator privileges..."
     
-    Call UpdateProgress "Checking administrator privileges" "starting"
+    Push "starting"
+    Push "Checking administrator privileges"
+    Call UpdateProgress
     
     ; Check admin rights
     nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\\scripts\\powershell\\ClaudeCodeInstaller.psm1\" -Force; $result = Test-AdminRights; if ($result.Passed) { Write-Output \"PASSED:Administrator privileges confirmed\" } else { Write-Output \"FAILED:$($result.Message)\" }"'

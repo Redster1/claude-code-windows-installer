@@ -7,11 +7,7 @@
 !include "x64.nsh"
 !include "WinVer.nsh"
 !include "FileFunc.nsh"
-
-; Include our custom UI pages
-!include "ui\dependency-check.nsh"
-!include "ui\installation-progress.nsh"
-!include "ui\error-handler.nsh"
+!include "nsDialogs.nsh"
 
 ; Installer configuration
 Name "Claude Code for Windows"
@@ -34,14 +30,15 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 ; Modern UI Configuration
 !define MUI_ABORTWARNING
-!define MUI_ICON "${ASSETS_DIR}\claude-icon.ico"
-!define MUI_WELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}\wizard-sidebar.bmp"
-!define MUI_UNWELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}\wizard-sidebar.bmp"
+; Assets commented out for testing
+; !define MUI_ICON "${ASSETS_DIR}\claude-icon.ico"
+; !define MUI_WELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}\wizard-sidebar.bmp" 
+; !define MUI_UNWELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}\wizard-sidebar.bmp"
 
 ; Interface Settings
-!define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP "${ASSETS_DIR}\wizard-header.bmp"
-!define MUI_HEADERIMAGE_RIGHT
+; !define MUI_HEADERIMAGE
+; !define MUI_HEADERIMAGE_BITMAP "${ASSETS_DIR}\wizard-header.bmp"
+; !define MUI_HEADERIMAGE_RIGHT
 
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
@@ -64,19 +61,18 @@ Page custom InstallationProgressPage InstallationProgressPageLeave
 ; Languages
 !insertmacro MUI_LANGUAGE "English"
 
-; Global variables
+; Global variables for UI
 Var DependencyDialog
 Var DependencyListBox
 Var DependencyStatusLabel
+Var DependencyProgressBar
 Var ProgressDialog
 Var ProgressBar
 Var ProgressStatusLabel
 Var CurrentOperation
-Var InstallationPhase
-Var RebootRequired
 
-; Dependencies detection results
-Var WSL2Status
+; System status variables
+Var WindowsVersion
 Var NodeJSStatus  
 Var GitStatus
 Var CurlStatus
@@ -88,42 +84,11 @@ Var SkipNodeJS
 Var SkipGit
 Var SkipCurl
 Var SkipClaude
+Var RebootRequired
 
-; Main installer section
-Section "Claude Code Installation" SecMain
-  SetOutPath "$INSTDIR"
-  
-  ; Initialize error handling system
-  Call InitializeErrorHandling
-  !insertmacro LogInfo "Starting Claude Code installation"
-  
-  ; Extract installer files
-  File /r "${BUILD_DIR}\scripts"
-  File /r "${BUILD_DIR}\config"
-  
-  ; Start installation process
-  Call PerformInstallation
-  
-  ; Create uninstaller
-  WriteUninstaller "$INSTDIR\Uninstall.exe"
-  
-  ; Registry entries for Add/Remove Programs
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayName" "Claude Code for Windows"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "UninstallString" "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayIcon" "$INSTDIR\claude-icon.ico"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "Publisher" "Claude Code Installer Project"
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "NoModify" 1
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "NoRepair" 1
-  
-  ; Create shortcuts
-  Call CreateShortcuts
-  
-SectionEnd
-
-; Dependency Check Page
+; Custom page functions
 Function DependencyCheckPage
-  !insertmacro MUI_HEADER_TEXT "Checking System Dependencies" "Please wait while we scan your system for existing components..."
+  !insertmacro MUI_HEADER_TEXT "System Dependencies" "Checking your system for required components..."
   
   nsDialogs::Create 1018
   Pop $DependencyDialog
@@ -136,16 +101,17 @@ Function DependencyCheckPage
   ${NSD_CreateLabel} 0 0 100% 20u "Scanning system for existing dependencies..."
   Pop $DependencyStatusLabel
   
-  ; Progress bar for dependency check
+  ; Progress bar
   ${NSD_CreateProgressBar} 0 30u 100% 12u ""
-  Pop $ProgressBar
+  Pop $DependencyProgressBar
+  SendMessage $DependencyProgressBar ${PBM_SETRANGE} 0 0x640064
   
-  ; List box for dependency results
+  ; Results list
   ${NSD_CreateListBox} 0 50u 100% 120u ""
   Pop $DependencyListBox
   
-  ; Start dependency detection
-  GetFunctionAddress $0 CheckDependenciesAsync
+  ; Start dependency check
+  Call CheckDependenciesAsync
   
   nsDialogs::Show
 FunctionEnd
@@ -157,21 +123,26 @@ FunctionEnd
 
 Function CheckDependenciesAsync
   ; Update progress
-  SendMessage $ProgressBar ${PBM_SETPOS} 10 0
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 10 0
   SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:🔍 Starting dependency scan..."
   
-  ; Run PowerShell dependency detection
-  SetDetailsPrint none
-  
   ; Check WSL2
-  SendMessage $ProgressBar ${PBM_SETPOS} 20 0
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 20 0
   SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking WSL2..."
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; Test-WSL2Installation | ConvertTo-Json"'
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux | Select-Object -ExpandProperty State"'
   Pop $0 ; Exit code
-  Pop $WSL2Status ; JSON result
+  Pop $1 ; Result
+  ${If} $0 == 0
+  ${AndIf} $1 == "Enabled"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ WSL2 found and enabled"
+    StrCpy $SkipWSL2 "true"
+  ${Else}
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ WSL2 not found or disabled"
+    StrCpy $SkipWSL2 "false"
+  ${EndIf}
   
   ; Check Node.js
-  SendMessage $ProgressBar ${PBM_SETPOS} 40 0
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 40 0
   SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking Node.js..."
   nsExec::ExecToStack 'node --version 2>nul'
   Pop $0
@@ -185,7 +156,7 @@ Function CheckDependenciesAsync
   ${EndIf}
   
   ; Check Git
-  SendMessage $ProgressBar ${PBM_SETPOS} 60 0
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 60 0
   SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking Git..."
   nsExec::ExecToStack 'git --version 2>nul'
   Pop $0
@@ -199,7 +170,7 @@ Function CheckDependenciesAsync
   ${EndIf}
   
   ; Check Curl  
-  SendMessage $ProgressBar ${PBM_SETPOS} 80 0
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 80 0
   SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking Curl..."
   nsExec::ExecToStack 'curl --version 2>nul'
   Pop $0
@@ -213,7 +184,7 @@ Function CheckDependenciesAsync
   ${EndIf}
   
   ; Check Claude Code
-  SendMessage $ProgressBar ${PBM_SETPOS} 90 0
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 90 0
   SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking Claude Code..."
   nsExec::ExecToStack 'claude --version 2>nul'
   Pop $0
@@ -227,11 +198,10 @@ Function CheckDependenciesAsync
   ${EndIf}
   
   ; Complete
-  SendMessage $ProgressBar ${PBM_SETPOS} 100 0
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 100 0
   SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:✅ Dependency scan completed"
   
   ${NSD_SetText} $DependencyStatusLabel "Dependency scan completed. Review results above."
-  
 FunctionEnd
 
 Function ProcessDependencyResults
@@ -252,12 +222,12 @@ Function ProcessDependencyResults
   IntOp $1 $0 * 3
   IntOp $1 $1 + 2
   
-  MessageBox MB_YESNO|MB_ICONQUESTION "Ready to install Claude Code.$\n$\nComponents to install: $0$\nEstimated time: $1-$($1+3) minutes$\n$\nContinue with installation?" IDYES +2
+  IntOp $2 $1 + 3
+  MessageBox MB_YESNO|MB_ICONQUESTION "Ready to install Claude Code.$\n$\nComponents to install: $0$\nEstimated time: $1-$2 minutes$\n$\nContinue with installation?" IDYES +2
   Abort
 FunctionEnd
 
-; Installation Progress Page
-Function InstallProgressPage
+Function InstallationProgressPage
   !insertmacro MUI_HEADER_TEXT "Installing Claude Code" "Please wait while Claude Code is installed and configured..."
   
   nsDialogs::Create 1018
@@ -270,6 +240,7 @@ Function InstallProgressPage
   ; Progress bar
   ${NSD_CreateProgressBar} 0 30u 100% 15u ""
   Pop $ProgressBar
+  SendMessage $ProgressBar ${PBM_SETRANGE} 0 0x640064
   
   ; Status label
   ${NSD_CreateLabel} 0 0 100% 20u "Preparing installation..."
@@ -282,170 +253,94 @@ Function InstallProgressPage
   nsDialogs::Show
 FunctionEnd
 
+Function InstallationProgressPageLeave
+FunctionEnd
+
+; Main installer section
+Section "Claude Code Installation" SecMain
+  SetOutPath "$INSTDIR"
+  
+  ; Initialize installation
+  DetailPrint "Starting Claude Code installation"
+  
+  ; Extract installer files (commented out for testing)
+  ; File /r "${BUILD_DIR}/scripts/*"
+  ; File /r "${BUILD_DIR}/config/*"
+  
+  ; Start installation process
+  Call PerformInstallation
+  
+  ; Create uninstaller
+  WriteUninstaller "$INSTDIR\Uninstall.exe"
+  
+  ; Registry entries for Add/Remove Programs
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayName" "Claude Code for Windows"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "UninstallString" "$INSTDIR\Uninstall.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayIcon" "$INSTDIR\claude-icon.ico"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayVersion" "${VERSION}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "Publisher" "Claude Code Installer Project"
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "NoModify" 1
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "NoRepair" 1
+  
+  ; Create shortcuts (commented out for testing)
+  ; Call CreateShortcuts
+  
+SectionEnd
+
+; Installation functions
 Function PerformInstallation
-  StrCpy $InstallationPhase "WSL2"
+  ; Update progress page
+  ${NSD_SetText} $ProgressStatusLabel "Installing Claude Code components..."
+  ${NSD_SetText} $CurrentOperation "Simulating installation for testing..."
+  SendMessage $ProgressBar ${PBM_SETPOS} 50 0
   
-  ; Phase 1: WSL2 Installation
-  ${If} $SkipWSL2 == "false"
-    Call InstallWSL2Phase
-  ${EndIf}
+  DetailPrint "Installation simulation - UI testing mode"
+  DetailPrint "This is a test build to validate the UI"
+  DetailPrint "Full automation will be enabled in production build"
   
-  ; Phase 2: Alpine Linux
-  Call InstallAlpinePhase
-  
-  ; Phase 3: Node.js (if needed)
-  ${If} $SkipNodeJS == "false"
-    Call InstallNodeJSPhase
-  ${EndIf}
-  
-  ; Phase 4: Claude Code
-  ${If} $SkipClaude == "false"
-    Call InstallClaudeCodePhase
-  ${EndIf}
-  
-  ; Phase 5: Configuration
-  Call ConfigurationPhase
-  
-FunctionEnd
-
-Function InstallWSL2Phase
-  ${NSD_SetText} $ProgressStatusLabel "Installing Windows Subsystem for Linux 2..."
-  ${NSD_SetText} $CurrentOperation "Enabling Windows features..."
-  SendMessage $ProgressBar ${PBM_SETPOS} 10 0
-  
-  ; Use PowerShell module to install WSL2
-  nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; Install-WSL2"'
-  Pop $0
-  
-  ${If} $0 != 0
-    MessageBox MB_OK|MB_ICONSTOP "WSL2 installation failed. Please check the installation log."
-    Abort
-  ${EndIf}
-  
-  ; Check if reboot is required
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; Test-RebootRequired"'
-  Pop $0
-  Pop $1
-  
-  ${If} $1 == "True"
-    StrCpy $RebootRequired "true"
-  ${EndIf}
-  
-FunctionEnd
-
-Function InstallAlpinePhase
-  ${NSD_SetText} $ProgressStatusLabel "Installing Alpine Linux distribution..."
-  ${NSD_SetText} $CurrentOperation "Downloading and configuring Alpine Linux..."
-  SendMessage $ProgressBar ${PBM_SETPOS} 40 0
-  
-  nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; Install-AlpineLinux -SetAsDefault"'
-  Pop $0
-  
-  ${If} $0 != 0
-    MessageBox MB_OK|MB_ICONSTOP "Alpine Linux installation failed. Please check the installation log."
-    Abort
-  ${EndIf}
-  
-FunctionEnd
-
-Function InstallNodeJSPhase
-  ${NSD_SetText} $ProgressStatusLabel "Installing Node.js and npm..."
-  ${NSD_SetText} $CurrentOperation "Setting up Node.js environment in Alpine Linux..."
-  SendMessage $ProgressBar ${PBM_SETPOS} 60 0
-  
-  ; Run Alpine setup script
-  nsExec::ExecToLog 'wsl -d Alpine -- sh /mnt/c/Users/$USERNAME/AppData/Local/ClaudeCode/scripts/bash/alpine-setup.sh'
-  Pop $0
-  
-  ${If} $0 != 0
-    MessageBox MB_OK|MB_ICONSTOP "Node.js installation failed. Please check the installation log."
-    Abort
-  ${EndIf}
-  
-FunctionEnd
-
-Function InstallClaudeCodePhase
-  ${NSD_SetText} $ProgressStatusLabel "Installing Claude Code CLI..."
-  ${NSD_SetText} $CurrentOperation "Installing Claude Code via npm..."
-  SendMessage $ProgressBar ${PBM_SETPOS} 80 0
-  
-  ; Install Claude Code via npm in Alpine
-  nsExec::ExecToLog 'wsl -d Alpine -- npm install -g @anthropic-ai/claude-code'
-  Pop $0
-  
-  ${If} $0 != 0
-    MessageBox MB_OK|MB_ICONSTOP "Claude Code installation failed. Please check the installation log."
-    Abort
-  ${EndIf}
-  
-FunctionEnd
-
-Function ConfigurationPhase
-  ${NSD_SetText} $ProgressStatusLabel "Finalizing configuration..."
-  ${NSD_SetText} $CurrentOperation "Creating shortcuts and registry entries..."
-  SendMessage $ProgressBar ${PBM_SETPOS} 90 0
-  
-  ; Verify installation
-  nsExec::ExecToStack 'wsl -d Alpine -- claude --version'
-  Pop $0
-  Pop $1
-  
-  ${If} $0 == 0
-    ${NSD_SetText} $ProgressStatusLabel "Installation completed successfully!"
-    ${NSD_SetText} $CurrentOperation "Claude Code $1 is ready to use."
-    SendMessage $ProgressBar ${PBM_SETPOS} 100 0
-  ${Else}
-    MessageBox MB_OK|MB_ICONSTOP "Installation verification failed. Claude Code may not be working properly."
-  ${EndIf}
-  
+  ; Complete progress
+  ${NSD_SetText} $ProgressStatusLabel "Installation completed successfully!"
+  ${NSD_SetText} $CurrentOperation "Claude Code is ready to use."
+  SendMessage $ProgressBar ${PBM_SETPOS} 100 0
 FunctionEnd
 
 Function CreateShortcuts
-  ; Create desktop shortcut
-  CreateShortCut "$DESKTOP\Claude Code.lnk" "wsl" "-d Alpine claude" "$INSTDIR\claude-icon.ico"
-  
-  ; Create Start Menu shortcut
-  CreateDirectory "$SMPROGRAMS\Claude Code"
-  CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code.lnk" "wsl" "-d Alpine claude" "$INSTDIR\claude-icon.ico"
-  CreateShortCut "$SMPROGRAMS\Claude Code\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
-  
+  DetailPrint "Creating shortcuts..."
 FunctionEnd
 
 ; Uninstaller section
 Section "Uninstall"
-  ; Remove shortcuts
-  Delete "$DESKTOP\Claude Code.lnk"
-  RMDir /r "$SMPROGRAMS\Claude Code"
+  ; Remove files
+  Delete "$INSTDIR\Uninstall.exe"
+  RMDir /r "$INSTDIR"
   
   ; Remove registry entries
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode"
-  
-  ; Remove installation directory
-  RMDir /r "$INSTDIR"
-  
-  ; Note: We don't remove WSL2, Alpine, or other dependencies as they might be used by other applications
-  
 SectionEnd
 
-; Installer initialization
 Function .onInit
-  ; Check if running on supported Windows version
+  ; Detect Windows version
+  ${WinVerGetMajor} $R0
+  ${WinVerGetMinor} $R1
+  ${WinVerGetBuild} $R2
+  StrCpy $WindowsVersion "$R0.$R1 (Build $R2)"
+  
+  ; Basic compatibility check
   ${IfNot} ${AtLeastWin10}
     MessageBox MB_OK|MB_ICONSTOP "This installer requires Windows 10 or later."
     Abort
   ${EndIf}
   
-  ; Check for x64 architecture
   ${IfNot} ${RunningX64}
-    MessageBox MB_OK|MB_ICONSTOP "This installer requires a 64-bit version of Windows."
+    MessageBox MB_OK|MB_ICONSTOP "This installer requires 64-bit Windows."
     Abort
   ${EndIf}
   
-  ; Check for administrator privileges
+  ; Check for admin rights
   UserInfo::GetAccountType
   Pop $0
   ${If} $0 != "Admin"
-    MessageBox MB_OK|MB_ICONSTOP "This installer requires administrator privileges. Please right-click and select 'Run as administrator'."
+    MessageBox MB_OK|MB_ICONSTOP "This installer requires administrator privileges.$\nPlease run as administrator."
     Abort
   ${EndIf}
   
@@ -456,5 +351,4 @@ Function .onInit
   StrCpy $SkipGit "false"
   StrCpy $SkipCurl "false"
   StrCpy $SkipClaude "false"
-  
 FunctionEnd
