@@ -8,6 +8,11 @@
 !include "WinVer.nsh"
 !include "FileFunc.nsh"
 
+; Include our custom UI pages
+!include "ui\dependency-check.nsh"
+!include "ui\installation-progress.nsh"
+!include "ui\error-handler.nsh"
+
 ; Installer configuration
 Name "Claude Code for Windows"
 OutFile "${DIST_DIR}\ClaudeCodeSetup.exe"
@@ -45,7 +50,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 Page custom DependencyCheckPage DependencyCheckPageLeave
 
 ; Custom installation progress page  
-Page custom InstallProgressPage
+Page custom InstallationProgressPage InstallationProgressPageLeave
 
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -87,6 +92,10 @@ Var SkipClaude
 ; Main installer section
 Section "Claude Code Installation" SecMain
   SetOutPath "$INSTDIR"
+  
+  ; Initialize error handling system
+  Call InitializeErrorHandling
+  !insertmacro LogInfo "Starting Claude Code installation"
   
   ; Extract installer files
   File /r "${BUILD_DIR}\scripts"
