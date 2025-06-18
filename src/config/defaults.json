@@ -1,0 +1,267 @@
+{
+  "installer": {
+    "name": "Claude Code for Windows",
+    "version": "1.0.0",
+    "publisher": "Claude Code Installer Project",
+    "description": "Automated installer for Claude Code CLI on Windows with WSL2",
+    "targetDirectory": "%LOCALAPPDATA%\\ClaudeCode",
+    "requiresAdmin": true,
+    "supportedWindowsVersions": {
+      "minimum": "10.0.19041",
+      "recommended": "10.0.22000"
+    }
+  },
+  "dependencies": {
+    "wsl2": {
+      "name": "Windows Subsystem for Linux 2",
+      "minVersion": "2.0.0",
+      "required": true,
+      "downloadUrl": "https://wslstorestorage.blob.core.windows.net/wslblob/wsl_update_x64.msi",
+      "features": [
+        "Microsoft-Windows-Subsystem-Linux",
+        "VirtualMachinePlatform"
+      ]
+    },
+    "alpine": {
+      "name": "Alpine Linux",
+      "distributionName": "Alpine",
+      "required": true,
+      "setAsDefault": true
+    },
+    "nodejs": {
+      "name": "Node.js",
+      "minVersion": "18.0.0",
+      "recommended": "20.11.0",
+      "required": false,
+      "packageName": "nodejs"
+    },
+    "npm": {
+      "name": "npm",
+      "minVersion": "9.0.0",
+      "required": false,
+      "packageName": "npm"
+    },
+    "git": {
+      "name": "Git",
+      "minVersion": "2.30.0",
+      "required": false,
+      "packageName": "git"
+    },
+    "curl": {
+      "name": "Curl",
+      "minVersion": "7.70.0",
+      "required": false,
+      "packageName": "curl"
+    },
+    "claude": {
+      "name": "Claude Code CLI",
+      "minVersion": "1.0.0",
+      "required": true,
+      "npmPackage": "@anthropic-ai/claude-code",
+      "globalInstall": true
+    }
+  },
+  "installation": {
+    "phases": [
+      {
+        "name": "System Validation",
+        "estimatedMinutes": 1,
+        "steps": [
+          "Check Windows version",
+          "Verify system architecture",
+          "Check disk space",
+          "Validate admin privileges",
+          "Test network connectivity"
+        ]
+      },
+      {
+        "name": "Dependency Detection",
+        "estimatedMinutes": 1,
+        "steps": [
+          "Scan for existing WSL2",
+          "Check Node.js installations",
+          "Detect Git and Curl",
+          "Look for Claude Code"
+        ]
+      },
+      {
+        "name": "WSL2 Setup",
+        "estimatedMinutes": 5,
+        "conditional": "!wsl2.compatible",
+        "steps": [
+          "Enable Windows features",
+          "Download WSL2 kernel",
+          "Install kernel update",
+          "Set WSL2 as default"
+        ]
+      },
+      {
+        "name": "Alpine Linux",
+        "estimatedMinutes": 3,
+        "steps": [
+          "Install Alpine distribution",
+          "Configure as default",
+          "Initial setup"
+        ]
+      },
+      {
+        "name": "Development Environment",
+        "estimatedMinutes": 4,
+        "conditional": "!nodejs.compatible || !git.compatible || !curl.compatible",
+        "steps": [
+          "Update package repositories",
+          "Install missing tools",
+          "Configure Node.js and npm",
+          "Set up environment variables"
+        ]
+      },
+      {
+        "name": "Claude Code Installation",
+        "estimatedMinutes": 2,
+        "conditional": "!claude.compatible",
+        "steps": [
+          "Install Claude Code via npm",
+          "Verify installation",
+          "Create shortcuts"
+        ]
+      },
+      {
+        "name": "Finalization",
+        "estimatedMinutes": 1,
+        "steps": [
+          "Create desktop shortcuts",
+          "Register uninstaller",
+          "Final verification"
+        ]
+      }
+    ]
+  },
+  "ui": {
+    "theme": {
+      "primaryColor": "#FF6B35",
+      "secondaryColor": "#2E86AB",
+      "backgroundColor": "#F5F5F5",
+      "textColor": "#333333"
+    },
+    "pages": {
+      "welcome": {
+        "title": "Welcome to Claude Code for Windows",
+        "subtitle": "This installer will set up Claude Code CLI with all required dependencies",
+        "features": [
+          "Automated WSL2 installation",
+          "Alpine Linux configuration",
+          "Node.js and development tools",
+          "Claude Code CLI setup"
+        ]
+      },
+      "dependencyCheck": {
+        "title": "Checking System Dependencies",
+        "subtitle": "Scanning your system for existing components..."
+      },
+      "installation": {
+        "title": "Installing Claude Code",
+        "subtitle": "Please wait while components are installed and configured..."
+      },
+      "completion": {
+        "title": "Installation Complete!",
+        "subtitle": "Claude Code is now ready to use"
+      }
+    }
+  },
+  "shortcuts": {
+    "desktop": {
+      "enabled": true,
+      "name": "Claude Code",
+      "target": "wsl",
+      "arguments": "-d Alpine claude",
+      "icon": "claude-icon.ico"
+    },
+    "startMenu": {
+      "enabled": true,
+      "folderName": "Claude Code",
+      "shortcuts": [
+        {
+          "name": "Claude Code",
+          "target": "wsl",
+          "arguments": "-d Alpine claude",
+          "icon": "claude-icon.ico"
+        },
+        {
+          "name": "Claude Code Documentation",
+          "target": "https://docs.anthropic.com/en/docs/claude-code"
+        },
+        {
+          "name": "Uninstall",
+          "target": "Uninstall.exe"
+        }
+      ]
+    }
+  },
+  "logging": {
+    "enabled": true,
+    "logFile": "%TEMP%\\ClaudeCodeInstaller.log",
+    "level": "INFO",
+    "includeTimestamp": true,
+    "maxSizeMB": 10
+  },
+  "registry": {
+    "uninstallKey": "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ClaudeCode",
+    "entries": {
+      "DisplayName": "Claude Code for Windows",
+      "DisplayVersion": "1.0.0",
+      "Publisher": "Claude Code Installer Project",
+      "DisplayIcon": "%INSTDIR%\\claude-icon.ico",
+      "UninstallString": "%INSTDIR%\\Uninstall.exe",
+      "NoModify": 1,
+      "NoRepair": 1,
+      "EstimatedSize": 100
+    }
+  },
+  "errorCodes": {
+    "1001": {
+      "title": "Unsupported Windows Version",
+      "description": "This installer requires Windows 10 version 2004 (build 19041) or later",
+      "solution": "Please update your Windows installation and try again"
+    },
+    "1002": {
+      "title": "Architecture Not Supported",
+      "description": "This installer requires a 64-bit version of Windows",
+      "solution": "Please use a 64-bit Windows installation"
+    },
+    "1003": {
+      "title": "Administrator Privileges Required",
+      "description": "This installer must be run with administrator privileges",
+      "solution": "Right-click the installer and select 'Run as administrator'"
+    },
+    "1004": {
+      "title": "Insufficient Disk Space",
+      "description": "At least 10GB of free disk space is required",
+      "solution": "Please free up disk space and try again"
+    },
+    "1005": {
+      "title": "Network Connection Required",
+      "description": "An internet connection is required to download components",
+      "solution": "Please check your internet connection and try again"
+    },
+    "2001": {
+      "title": "WSL2 Installation Failed",
+      "description": "Failed to install Windows Subsystem for Linux 2",
+      "solution": "Check Windows Update and ensure virtualization is enabled in BIOS"
+    },
+    "2002": {
+      "title": "Alpine Linux Installation Failed",
+      "description": "Failed to install Alpine Linux distribution",
+      "solution": "Verify WSL2 is working correctly and try again"
+    },
+    "2003": {
+      "title": "Node.js Installation Failed",
+      "description": "Failed to install Node.js in Alpine Linux",
+      "solution": "Check Alpine package repositories and network connectivity"
+    },
+    "2004": {
+      "title": "Claude Code Installation Failed",
+      "description": "Failed to install Claude Code CLI via npm",
+      "solution": "Verify Node.js and npm are working correctly"
+    }
+  }
+}

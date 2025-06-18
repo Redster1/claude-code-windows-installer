@@ -1,0 +1,50 @@
+{
+  "name": "claude-code-windows-installer",
+  "version": "1.0.0",
+  "description": "Windows installer for Claude Code CLI - designed for lawyers and non-technical users",
+  "main": "src/scripts/validation/dependency-detector.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "build": "make build",
+    "dev": "make dev-setup",
+    "clean": "make clean",
+    "lint": "eslint src/scripts/validation/ --ext .js",
+    "format": "prettier --write src/scripts/validation/"
+  },
+  "keywords": [
+    "claude-code",
+    "windows-installer",
+    "wsl2",
+    "lawyers",
+    "automation",
+    "nsis"
+  ],
+  "author": "Reese",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5"
+  },
+  "dependencies": {
+    "child_process": "^1.0.2",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/src/tests/unit/**/*.test.js"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-username/claude-code-windows-installer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/claude-code-windows-installer/issues"
+  },
+  "homepage": "https://github.com/your-username/claude-code-windows-installer#readme"
+}
