@@ -16,7 +16,7 @@ build: prepare
 	@echo "Building Claude Code installer v$(VERSION)..."
 	$(NSIS) -DVERSION=$(VERSION) \
 	        -DDIST_DIR=$(DIST_DIR) \
-	        -DASSETS_DIR=$(SRC_DIR)/installer/assets \
+	        -DASSETS_DIR=generated-images \
 	        -DBUILD_DIR=$(BUILD_DIR) \
 	        $(SRC_DIR)/installer/main.nsi
 

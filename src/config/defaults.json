@@ -174,7 +174,7 @@
       "name": "Claude Code",
       "target": "wsl",
       "arguments": "-d Alpine claude",
-      "icon": "claude-icon.ico"
+      "icon": "generated-images/claude-icon.ico"
     },
     "startMenu": {
       "enabled": true,
@@ -184,7 +184,7 @@
           "name": "Claude Code",
           "target": "wsl",
           "arguments": "-d Alpine claude",
-          "icon": "claude-icon.ico"
+          "icon": "generated-images/claude-icon.ico"
         },
         {
           "name": "Claude Code Documentation",
@@ -210,7 +210,7 @@
       "DisplayName": "Claude Code for Windows",
       "DisplayVersion": "1.0.0",
       "Publisher": "Claude Code Installer Project",
-      "DisplayIcon": "%INSTDIR%\\claude-icon.ico",
+      "DisplayIcon": "%INSTDIR%\\generated-images\\claude-icon.ico",
       "UninstallString": "%INSTDIR%\\Uninstall.exe",
       "NoModify": 1,
       "NoRepair": 1,
