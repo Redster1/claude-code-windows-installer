@@ -25,6 +25,7 @@ prepare:
 	mkdir -p $(BUILD_DIR) $(DIST_DIR)
 	cp -r $(SRC_DIR)/scripts $(BUILD_DIR)/
 	cp -r $(SRC_DIR)/config $(BUILD_DIR)/
+	cp -r $(SRC_DIR)/templates $(BUILD_DIR)/
 
 sign:
 	@echo "Code signing must be done on Windows with valid certificate"

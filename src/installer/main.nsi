@@ -899,6 +899,10 @@ Section "Claude Code Installation" SecMain
   SetOutPath "$INSTDIR\config"
   File "${BUILD_DIR}\config\defaults.json"
   
+  ; Extract template files
+  SetOutPath "$INSTDIR\templates"
+  File "${BUILD_DIR}\templates\CLAUDE.md.template"
+  
   ; Start installation process
   Call PerformInstallation
   
@@ -1267,6 +1271,15 @@ Function CreateProjectsFolder
         FileClose $0
         DetailPrint "Created README.txt in projects folder"
       ${EndIf}
+      
+      ; Copy CLAUDE.md template to projects folder
+      DetailPrint "Creating CLAUDE.md in projects folder..."
+      CopyFiles "$INSTDIR\templates\CLAUDE.md.template" "$ProjectsFolderPath\CLAUDE.md"
+      ${If} ${FileExists} "$ProjectsFolderPath\CLAUDE.md"
+        DetailPrint "Created CLAUDE.md in projects folder"
+      ${Else}
+        DetailPrint "Warning: Could not create CLAUDE.md in projects folder"
+      ${EndIf}
     ${Else}
       DetailPrint "Warning: Could not create projects folder: $ProjectsFolderPath"
       MessageBox MB_OK|MB_ICONEXCLAMATION "Warning: Could not create the projects folder at:$\n$\n$ProjectsFolderPath$\n$\nYou may need to create this folder manually or run the installer as administrator."
@@ -1317,6 +1330,9 @@ Section "Uninstall"
   ; Remove files
   Delete "$INSTDIR\Uninstall.exe"
   RMDir /r "$INSTDIR\generated-images"
+  RMDir /r "$INSTDIR\scripts"
+  RMDir /r "$INSTDIR\config"
+  RMDir /r "$INSTDIR\templates"
   RMDir /r "$INSTDIR"
   
   ; Remove shortcuts
