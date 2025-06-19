@@ -30,21 +30,23 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 ; Modern UI Configuration
 !define MUI_ABORTWARNING
-; Assets temporarily disabled for testing core logic
-; !define MUI_ICON "generated-images/claude-icon.ico"
-; !define MUI_WELCOMEFINISHPAGE_BITMAP "generated-images/wizard-sidebar.bmp" 
-; !define MUI_UNWELCOMEFINISHPAGE_BITMAP "generated-images/wizard-sidebar.bmp"
+!define MUI_ICON "${ASSETS_DIR}/claude-icon.ico"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}/wizard-sidebar.bmp" 
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}/wizard-sidebar.bmp"
 
 ; Interface Settings
-; !define MUI_HEADERIMAGE
-; !define MUI_HEADERIMAGE_BITMAP "generated-images/wizard-header.bmp"
-; !define MUI_HEADERIMAGE_RIGHT
+!define MUI_HEADERIMAGE
+!define MUI_HEADERIMAGE_BITMAP "${ASSETS_DIR}/wizard-header.bmp"
+!define MUI_HEADERIMAGE_RIGHT
 
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
 
 ; Custom dependency check page
 Page custom DependencyCheckPage DependencyCheckPageLeave
+
+; Custom projects folder selection page
+Page custom ProjectsFolderPage ProjectsFolderPageLeave
 
 ; Custom installation progress page  
 Page custom InstallationProgressPage InstallationProgressPageLeave
@@ -87,6 +89,16 @@ Var SkipClaude
 Var SkipAlpine
 Var CompatibleDistribution
 Var RebootRequired
+
+; Projects folder configuration
+Var ProjectsFolderPath
+Var ProjectsFolderName
+Var ProjectsFolderDialog
+Var ProjectsFolderPathEdit
+Var ProjectsFolderBrowseButton
+Var ProjectsFolderLabel
+Var ProjectsFolderNameEdit
+Var ProjectsFolderPreview
 
 
 ; Custom page functions
@@ -628,6 +640,128 @@ Function CheckDistributionForTools
   Push $9 ; Push the result
 FunctionEnd
 
+Function ProjectsFolderPage
+  !insertmacro MUI_HEADER_TEXT "Claude Code Projects Folder Setup" "Choose where Claude Code will create and access your projects."
+  
+  nsDialogs::Create 1018
+  Pop $ProjectsFolderDialog
+  
+  ${If} $ProjectsFolderDialog == error
+    Abort
+  ${EndIf}
+  
+  ; Explanatory label
+  ${NSD_CreateLabel} 0 0 100% 20u "Claude Code will create a dedicated folder for your projects. You can customize the location and name below."
+  Pop $ProjectsFolderLabel
+  
+  ; Base path label and edit field
+  ${NSD_CreateLabel} 0 30u 20% 12u "Location:"
+  Pop $0
+  
+  ${NSD_CreateText} 22% 28u 65% 14u "$ProjectsFolderPath"
+  Pop $ProjectsFolderPathEdit
+  
+  ; Browse button
+  ${NSD_CreateButton} 89% 28u 11% 14u "Browse..."
+  Pop $ProjectsFolderBrowseButton
+  ${NSD_OnClick} $ProjectsFolderBrowseButton OnBrowseProjectsFolder
+  
+  ; Folder name label and edit field
+  ${NSD_CreateLabel} 0 50u 20% 12u "Folder Name:"
+  Pop $0
+  
+  ${NSD_CreateText} 22% 48u 65% 14u "$ProjectsFolderName"
+  Pop $ProjectsFolderNameEdit
+  ${NSD_OnChange} $ProjectsFolderNameEdit OnProjectsFolderNameChange
+  
+  ; Preview label
+  ${NSD_CreateLabel} 0 70u 100% 12u "Full Path: $ProjectsFolderPath"
+  Pop $ProjectsFolderPreview
+  
+  ; Help text
+  ${NSD_CreateLabel} 0 90u 100% 40u "This folder will be created during installation and Claude Code shortcuts will open directly in this location. You can change this later by editing the shortcuts or using a different folder when launching Claude Code."
+  Pop $0
+  
+  ; Initialize preview
+  Call UpdateProjectsPreview
+  
+  nsDialogs::Show
+FunctionEnd
+
+Function ProjectsFolderPageLeave
+  ; Get the current values from the edit controls
+  ${NSD_GetText} $ProjectsFolderPathEdit $0
+  ${NSD_GetText} $ProjectsFolderNameEdit $1
+  
+  ; Remove trailing backslash if present
+  StrCpy $2 $0 1 -1
+  ${If} $2 == "\"
+    StrCpy $0 $0 -1
+  ${EndIf}
+  
+  ; Validate folder name (remove invalid characters)
+  StrCpy $ProjectsFolderName $1
+  Call ValidateProjectsFolderName
+  
+  ; Build full path
+  StrCpy $ProjectsFolderPath "$0\$ProjectsFolderName"
+  
+  ; Validate the path
+  Call ValidateProjectsPath
+FunctionEnd
+
+Function OnBrowseProjectsFolder
+  nsDialogs::SelectFolderDialog "Select the parent folder for Claude Code Projects:" $ProjectsFolderPath
+  Pop $0
+  
+  ${If} $0 != ""
+    StrCpy $ProjectsFolderPath "$0"
+    ${NSD_SetText} $ProjectsFolderPathEdit "$0"
+    Call UpdateProjectsPreview
+  ${EndIf}
+FunctionEnd
+
+Function OnProjectsFolderNameChange
+  ${NSD_GetText} $ProjectsFolderNameEdit $ProjectsFolderName
+  Call UpdateProjectsPreview
+FunctionEnd
+
+Function UpdateProjectsPreview
+  ; Get current base path and folder name
+  ${NSD_GetText} $ProjectsFolderPathEdit $0
+  ${NSD_GetText} $ProjectsFolderNameEdit $1
+  
+  ; Remove trailing backslash if present
+  StrCpy $2 $0 1 -1
+  ${If} $2 == "\"
+    StrCpy $0 $0 -1
+  ${EndIf}
+  
+  ; Update preview
+  ${NSD_SetText} $ProjectsFolderPreview "Full Path: $0\$1"
+FunctionEnd
+
+Function ValidateProjectsFolderName
+  ; Basic validation - ensure it's not empty
+  ; Windows will handle invalid characters during folder creation
+  
+  ; Check if empty
+  StrLen $0 $ProjectsFolderName
+  ${If} $0 == 0
+    StrCpy $ProjectsFolderName "Claude Code Projects"
+  ${EndIf}
+  
+  ; If the name is just spaces, reset to default
+  StrCmp $ProjectsFolderName " " 0 +2
+    StrCpy $ProjectsFolderName "Claude Code Projects"
+FunctionEnd
+
+Function ValidateProjectsPath
+  ; Basic path validation - check if parent directory exists
+  ; More detailed validation would be done during actual folder creation
+  DetailPrint "Projects folder will be created at: $ProjectsFolderPath"
+FunctionEnd
+
 Function ProcessDependencyResults
   ; Calculate what needs to be installed
   StrCpy $0 0 ; Component counter
@@ -746,25 +880,24 @@ Section "Claude Code Installation" SecMain
   ; Extract installer files to installation directory
   SetOutPath "$INSTDIR"
   
-  ; Extract generated images - temporarily disabled for testing
+  ; Extract generated images
   SetOutPath "$INSTDIR\generated-images"
-  ; File "generated-images\claude-icon.ico"
-  ; File "generated-images\wizard-header.bmp"
-  ; File "generated-images\wizard-sidebar.bmp"
+  File "${ASSETS_DIR}\claude-icon.ico"
+  File "${ASSETS_DIR}\wizard-header.bmp"
+  File "${ASSETS_DIR}\wizard-sidebar.bmp"
   
-  ; TODO: Fix file extraction syntax - temporarily disabled for testing
   ; Extract PowerShell scripts
-  ; SetOutPath "$INSTDIR\scripts\powershell"
-  ; File "${BUILD_DIR}\scripts\powershell\ClaudeCodeInstaller.psm1"
-  ; File "${BUILD_DIR}\scripts\powershell\ProgressTracker.psm1"
+  SetOutPath "$INSTDIR\scripts\powershell"
+  File "${BUILD_DIR}\scripts\powershell\ClaudeCodeInstaller.psm1"
+  File "${BUILD_DIR}\scripts\powershell\ProgressTracker.psm1"
   
   ; Extract bash scripts  
-  ; SetOutPath "$INSTDIR\scripts\bash"
-  ; File "${BUILD_DIR}\scripts\bash\alpine-setup.sh"
+  SetOutPath "$INSTDIR\scripts\bash"
+  File "${BUILD_DIR}\scripts\bash\alpine-setup.sh"
   
   ; Extract configuration files
-  ; SetOutPath "$INSTDIR\config"
-  ; File "${BUILD_DIR}\config\defaults.json"
+  SetOutPath "$INSTDIR\config"
+  File "${BUILD_DIR}\config\defaults.json"
   
   ; Start installation process
   Call PerformInstallation
@@ -778,6 +911,7 @@ Section "Claude Code Installation" SecMain
   ; WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayIcon" "$INSTDIR\generated-images\claude-icon.ico"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayVersion" "${VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "Publisher" "Claude Code Installer Project"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "ProjectsFolder" "$ProjectsFolderPath"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "NoRepair" 1
   
@@ -859,7 +993,12 @@ Function PerformInstallation
     SendMessage $ProgressBar ${PBM_SETPOS} 90 0
   ${EndIf}
   
-  ; Step 5: Create Windows shortcuts and finalize (10% of progress)
+  ; Step 5: Create Claude Code Projects folder
+  ${NSD_SetText} $CurrentOperation "Creating Claude Code Projects folder..."
+  SendMessage $ProgressBar ${PBM_SETPOS} 92 0
+  Call CreateProjectsFolder
+  
+  ; Step 6: Create Windows shortcuts and finalize (8% of progress)
   ${NSD_SetText} $CurrentOperation "Creating shortcuts and finalizing..."
   SendMessage $ProgressBar ${PBM_SETPOS} 95 0
   Call CreateShortcuts
@@ -1097,6 +1236,44 @@ Function ValidateSystemRequirements
   ${EndIf}
 FunctionEnd
 
+; Claude Code Projects Folder Creation Function
+Function CreateProjectsFolder
+  DetailPrint "Creating Claude Code Projects folder..."
+  
+  ; Check if the projects folder already exists
+  ${If} ${FileExists} "$ProjectsFolderPath\*.*"
+    DetailPrint "Projects folder already exists: $ProjectsFolderPath"
+  ${Else}
+    DetailPrint "Creating projects folder: $ProjectsFolderPath"
+    
+    ; Create the directory
+    CreateDirectory "$ProjectsFolderPath"
+    
+    ; Verify creation was successful
+    ${If} ${FileExists} "$ProjectsFolderPath\*.*"
+      DetailPrint "Projects folder created successfully: $ProjectsFolderPath"
+      
+      ; Create a welcome README file in the projects folder
+      FileOpen $0 "$ProjectsFolderPath\README.txt" w
+      ${If} $0 != ""
+        FileWrite $0 "Welcome to your Claude Code Projects folder!$\r$\n$\r$\n"
+        FileWrite $0 "This folder was created by the Claude Code Windows Installer.$\r$\n"
+        FileWrite $0 "You can use this folder to organize your Claude Code projects.$\r$\n$\r$\n"
+        FileWrite $0 "The Claude Code shortcuts are configured to open directly in this folder.$\r$\n$\r$\n"
+        FileWrite $0 "To change the working directory, you can either:$\r$\n"
+        FileWrite $0 "- Edit the shortcut properties to change the '--cd' parameter$\r$\n"
+        FileWrite $0 "- Use 'cd' commands within Claude Code to navigate elsewhere$\r$\n$\r$\n"
+        FileWrite $0 "Happy coding with Claude!$\r$\n"
+        FileClose $0
+        DetailPrint "Created README.txt in projects folder"
+      ${EndIf}
+    ${Else}
+      DetailPrint "Warning: Could not create projects folder: $ProjectsFolderPath"
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Warning: Could not create the projects folder at:$\n$\n$ProjectsFolderPath$\n$\nYou may need to create this folder manually or run the installer as administrator."
+    ${EndIf}
+  ${EndIf}
+FunctionEnd
+
 ; Windows Shortcuts Creation Function
 Function CreateShortcuts
   DetailPrint "Creating Windows shortcuts..."
@@ -1113,23 +1290,22 @@ Function CreateShortcuts
   
   DetailPrint "Creating shortcuts for WSL distribution: $5"
   
-  ; Create desktop shortcut (no icon for testing)
+  ; Build command arguments for shortcuts
   ${If} $5 == "default"
-    CreateShortCut "$DESKTOP\Claude Code.lnk" "wsl" "-- claude"
+    StrCpy $6 '--cd "$ProjectsFolderPath" -- claude'
+    StrCpy $7 '--cd "$ProjectsFolderPath"'
   ${Else}
-    CreateShortCut "$DESKTOP\Claude Code.lnk" "wsl" "-d $5 -- claude"
+    StrCpy $6 '--cd "$ProjectsFolderPath" -d $5 -- claude'
+    StrCpy $7 '--cd "$ProjectsFolderPath" -d $5'
   ${EndIf}
+  
+  ; Create desktop shortcut with projects folder as working directory
+  CreateShortCut "$DESKTOP\Claude Code.lnk" "wsl.exe" "$6" "$INSTDIR\generated-images\claude-icon.ico"
   
   ; Create Start Menu shortcuts
   CreateDirectory "$SMPROGRAMS\Claude Code"
-  
-  ${If} $5 == "default"
-    CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code.lnk" "wsl" "-- claude"
-    CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code Terminal.lnk" "wsl" ""
-  ${Else}
-    CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code.lnk" "wsl" "-d $5 -- claude"
-    CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code Terminal.lnk" "wsl" "-d $5"
-  ${EndIf}
+  CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code.lnk" "wsl.exe" "$6" "$INSTDIR\generated-images\claude-icon.ico"
+  CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code Terminal.lnk" "wsl.exe" "$7" "$INSTDIR\generated-images\claude-icon.ico"
   
   CreateShortCut "$SMPROGRAMS\Claude Code\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
   
@@ -1146,6 +1322,27 @@ Section "Uninstall"
   ; Remove shortcuts
   Delete "$DESKTOP\Claude Code.lnk"
   RMDir /r "$SMPROGRAMS\Claude Code"
+  
+  ; Ask user about removing Claude Code Projects folder
+  ; Try to read the projects folder path from registry (if we stored it during installation)
+  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "ProjectsFolder"
+  ${If} $0 != ""
+    ${AndIf} ${FileExists} "$0\*.*"
+    MessageBox MB_YESNO|MB_ICONQUESTION "Do you want to remove your Claude Code Projects folder and all its contents?$\n$\nLocation: $0$\n$\nWarning: This will permanently delete all your projects!" IDYES RemoveProjects IDNO KeepProjects
+    
+    RemoveProjects:
+      RMDir /r "$0"
+      ${If} ${FileExists} "$0\*.*"
+        MessageBox MB_OK|MB_ICONEXCLAMATION "Could not completely remove the projects folder. Some files may still remain at:$\n$\n$0"
+      ${EndIf}
+      Goto EndProjectsRemoval
+      
+    KeepProjects:
+      MessageBox MB_OK|MB_ICONINFORMATION "Your Claude Code Projects folder has been preserved at:$\n$\n$0"
+      Goto EndProjectsRemoval
+      
+    EndProjectsRemoval:
+  ${EndIf}
   
   ; Remove registry entries
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode"
@@ -1186,4 +1383,8 @@ Function .onInit
   StrCpy $SkipClaude "false"
   StrCpy $SkipAlpine "false"
   StrCpy $CompatibleDistribution ""
+  
+  ; Initialize projects folder variables
+  StrCpy $ProjectsFolderName "Claude Code Projects"
+  StrCpy $ProjectsFolderPath "$DOCUMENTS\Claude Code Projects"
 FunctionEnd
