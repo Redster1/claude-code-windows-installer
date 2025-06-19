@@ -3,11 +3,14 @@ node_modules/
 npm-debug.log*
 package-lock.json
 
-# Build outputs
+# Build outputs (keep dist/ for releases, ignore intermediate build files)
 build/
-dist/
-*.exe
+# dist/ - removed so we can track successful installer builds
 *.msi
+
+# Ignore random .exe files but allow dist/*.exe
+*.exe
+!dist/*.exe
 
 # Development
 .vscode/
