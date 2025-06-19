@@ -30,15 +30,15 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 ; Modern UI Configuration
 !define MUI_ABORTWARNING
-; Assets enabled with generated images
-!define MUI_ICON "${ASSETS_DIR}/claude-icon.ico"
-!define MUI_WELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}/wizard-sidebar.bmp" 
-!define MUI_UNWELCOMEFINISHPAGE_BITMAP "${ASSETS_DIR}/wizard-sidebar.bmp"
+; Assets temporarily disabled for testing core logic
+; !define MUI_ICON "generated-images/claude-icon.ico"
+; !define MUI_WELCOMEFINISHPAGE_BITMAP "generated-images/wizard-sidebar.bmp" 
+; !define MUI_UNWELCOMEFINISHPAGE_BITMAP "generated-images/wizard-sidebar.bmp"
 
 ; Interface Settings
-!define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP "${ASSETS_DIR}/wizard-header.bmp"
-!define MUI_HEADERIMAGE_RIGHT
+; !define MUI_HEADERIMAGE
+; !define MUI_HEADERIMAGE_BITMAP "generated-images/wizard-header.bmp"
+; !define MUI_HEADERIMAGE_RIGHT
 
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
@@ -84,6 +84,8 @@ Var SkipNodeJS
 Var SkipGit
 Var SkipCurl
 Var SkipClaude
+Var SkipAlpine
+Var CompatibleDistribution
 Var RebootRequired
 
 
@@ -129,6 +131,8 @@ Function CheckDependenciesAsync
   StrCpy $SkipGit "false"
   StrCpy $SkipCurl "false"
   StrCpy $SkipClaude "false"
+  StrCpy $SkipAlpine "false"
+  StrCpy $CompatibleDistribution ""
   
   ; Update progress
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 5 0
@@ -159,6 +163,11 @@ Function CheckDependenciesAsync
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 85 0
   SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:🤖 Checking Claude Code (Windows + WSL)..."
   Call CheckClaudeCodeDual
+  
+  ; Check for compatible WSL distribution (NEW - this determines if we need Alpine)
+  SendMessage $DependencyProgressBar ${PBM_SETPOS} 95 0
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:🔧 Checking for compatible WSL distribution..."
+  Call CheckCompatibleWSLDistribution
   
   ; Complete scan
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 100 0
@@ -356,6 +365,269 @@ Function CheckClaudeCodeDual
   ${EndIf}
 FunctionEnd
 
+Function CheckCompatibleWSLDistribution
+  ; This function determines if we have a WSL distribution that already has all required tools
+  ; If so, we can skip installing Alpine Linux entirely
+  
+  ${If} $SkipWSL2 == "false"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ⚠️ WSL2 not available - Alpine Linux will be needed"
+    StrCpy $SkipAlpine "false"
+    Return
+  ${EndIf}
+  
+  ; Get list of available WSL distributions
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🔍 Scanning available WSL distributions..."
+  nsExec::ExecToStack 'wsl --list --quiet 2>nul'
+  Pop $0
+  ${If} $0 != 0
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ⚠️ Could not list WSL distributions - Alpine will be installed"
+    StrCpy $SkipAlpine "false"
+    Return
+  ${EndIf}
+  
+  ; Check common distributions: default, debian, ubuntu, fedora, opensuse
+  StrCpy $7 "" ; Will store compatible distribution name
+  
+  ; Try default distribution first
+  Push ""
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution $7
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: $7"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  ; Try specific known distributions
+  Push "debian"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "debian"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Debian"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "Ubuntu"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "Ubuntu"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Ubuntu"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "fedora"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "fedora"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Fedora"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "openSUSE-Leap"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "openSUSE-Leap"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: openSUSE Leap"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "openSUSE-Tumbleweed"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "openSUSE-Tumbleweed"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: openSUSE Tumbleweed"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "Arch"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "Arch"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Arch Linux"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "CentOS"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "CentOS"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: CentOS"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "RHEL"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "RHEL"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Red Hat Enterprise Linux"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "OracleLinux"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "OracleLinux"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Oracle Linux"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "SLES"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "SLES"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: SUSE Linux Enterprise Server"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "kali-linux"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "kali-linux"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Kali Linux"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "Pengwin"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "Pengwin"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Pengwin"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "Ubuntu-18.04"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "Ubuntu-18.04"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Ubuntu 18.04"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "Ubuntu-20.04"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "Ubuntu-20.04"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Ubuntu 20.04"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  Push "Ubuntu-22.04"
+  Call CheckDistributionForTools
+  Pop $7
+  ${If} $7 != ""
+    StrCpy $CompatibleDistribution "Ubuntu-22.04"
+    StrCpy $SkipAlpine "true"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Ubuntu 22.04"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
+    Return
+  ${EndIf}
+  
+  ; No compatible distribution found
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ No existing distribution has all required tools"
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   💡 Will install Alpine Linux with all tools"
+  StrCpy $SkipAlpine "false"
+  StrCpy $CompatibleDistribution ""
+FunctionEnd
+
+Function CheckDistributionForTools
+  ; Input: distribution name on stack (empty for default)
+  ; Output: pushes result on stack (distribution name if compatible, empty if not)
+  Pop $8 ; Distribution name
+  
+  StrCpy $9 "" ; Initialize output as empty
+  
+  ; Build WSL command
+  StrCpy $6 "wsl"
+  ${If} $8 != ""
+    StrCpy $6 "$6 -d $8"
+  ${EndIf}
+  
+  ; Check for Claude Code (most important)
+  nsExec::ExecToStack '$6 -- claude --version 2>/dev/null'
+  Pop $0
+  ${If} $0 != 0
+    Push $9 ; Push empty result
+    Return ; Claude Code not found, this distribution is not compatible
+  ${EndIf}
+  
+  ; Check for Node.js
+  nsExec::ExecToStack '$6 -- node --version 2>/dev/null'
+  Pop $0
+  ${If} $0 != 0
+    Push $9 ; Push empty result
+    Return ; Node.js not found
+  ${EndIf}
+  
+  ; Check for Git
+  nsExec::ExecToStack '$6 -- git --version 2>/dev/null'
+  Pop $0
+  ${If} $0 != 0
+    Push $9 ; Push empty result
+    Return ; Git not found
+  ${EndIf}
+  
+  ; Check for Curl
+  nsExec::ExecToStack '$6 -- curl --version 2>/dev/null'
+  Pop $0
+  ${If} $0 != 0
+    Push $9 ; Push empty result
+    Return ; Curl not found
+  ${EndIf}
+  
+  ; All tools found - this distribution is compatible!
+  ${If} $8 != ""
+    StrCpy $9 $8
+  ${Else}
+    StrCpy $9 "default"
+  ${EndIf}
+  
+  Push $9 ; Push the result
+FunctionEnd
+
 Function ProcessDependencyResults
   ; Calculate what needs to be installed
   StrCpy $0 0 ; Component counter
@@ -396,12 +668,12 @@ Function ProcessDependencyResults
     StrCpy $8 "$8• Claude Code ($ClaudeStatus)$\n"
   ${EndIf}
   
-  ; Always need Alpine Linux for consistent environment
-  ${If} $SkipWSL2 == "false"
-    StrCpy $7 "$7• Alpine Linux distribution$\n"
-  ${Else}
+  ; Alpine Linux installation (only if no compatible distribution exists)
+  ${If} $SkipAlpine == "false"
     IntOp $0 $0 + 1
     StrCpy $7 "$7• Alpine Linux distribution$\n"
+  ${Else}
+    StrCpy $8 "$8• Alpine Linux (compatible distribution found: $CompatibleDistribution)$\n"
   ${EndIf}
   
   ; Calculate time estimate
@@ -474,11 +746,11 @@ Section "Claude Code Installation" SecMain
   ; Extract installer files to installation directory
   SetOutPath "$INSTDIR"
   
-  ; Extract generated images
+  ; Extract generated images - temporarily disabled for testing
   SetOutPath "$INSTDIR\generated-images"
-  File "${ASSETS_DIR}\claude-icon.ico"
-  File "${ASSETS_DIR}\wizard-header.bmp"
-  File "${ASSETS_DIR}\wizard-sidebar.bmp"
+  ; File "generated-images\claude-icon.ico"
+  ; File "generated-images\wizard-header.bmp"
+  ; File "generated-images\wizard-sidebar.bmp"
   
   ; TODO: Fix file extraction syntax - temporarily disabled for testing
   ; Extract PowerShell scripts
@@ -503,7 +775,7 @@ Section "Claude Code Installation" SecMain
   ; Registry entries for Add/Remove Programs
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayName" "Claude Code for Windows"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "UninstallString" "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayIcon" "$INSTDIR\generated-images\claude-icon.ico"
+  ; WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayIcon" "$INSTDIR\generated-images\claude-icon.ico"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "DisplayVersion" "${VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "Publisher" "Claude Code Installer Project"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeCode" "NoModify" 1
@@ -541,17 +813,29 @@ Function PerformInstallation
     SendMessage $ProgressBar ${PBM_SETPOS} 30 0
   ${EndIf}
   
-  ; Step 2: Install Alpine Linux distribution (20% of progress)
-  ${NSD_SetText} $CurrentOperation "Setting up Alpine Linux..."
-  SendMessage $ProgressBar ${PBM_SETPOS} 40 0
-  Call InstallAlpineLinux
-  SendMessage $ProgressBar ${PBM_SETPOS} 50 0
+  ; Step 2: Install Alpine Linux distribution (20% of progress) - only if needed
+  ${If} $SkipAlpine == "false"
+    ${NSD_SetText} $CurrentOperation "Setting up Alpine Linux..."
+    SendMessage $ProgressBar ${PBM_SETPOS} 40 0
+    Call InstallAlpineLinux
+    SendMessage $ProgressBar ${PBM_SETPOS} 50 0
+  ${Else}
+    DetailPrint "Compatible WSL distribution found ($CompatibleDistribution), skipping Alpine installation"
+    ${NSD_SetText} $CurrentOperation "Using existing WSL distribution: $CompatibleDistribution"
+    SendMessage $ProgressBar ${PBM_SETPOS} 50 0
+  ${EndIf}
   
-  ; Step 3: Install Node.js in Alpine if needed (20% of progress)
+  ; Step 3: Install Node.js in target distribution if needed (20% of progress)
   ${If} $SkipNodeJS == "false"
-    ${NSD_SetText} $CurrentOperation "Installing Node.js in Alpine Linux..."
+    ${If} $CompatibleDistribution != ""
+      ${NSD_SetText} $CurrentOperation "Installing Node.js in $CompatibleDistribution..."
+      DetailPrint "Installing Node.js in existing distribution: $CompatibleDistribution"
+    ${Else}
+      ${NSD_SetText} $CurrentOperation "Installing Node.js in Alpine Linux..."
+      DetailPrint "Installing Node.js in Alpine Linux"
+    ${EndIf}
     SendMessage $ProgressBar ${PBM_SETPOS} 60 0
-    Call InstallNodeJSInAlpine
+    Call InstallNodeJSInDistribution
     SendMessage $ProgressBar ${PBM_SETPOS} 70 0
   ${Else}
     DetailPrint "Compatible Node.js found, skipping installation"
@@ -560,9 +844,15 @@ Function PerformInstallation
   
   ; Step 4: Install Claude Code CLI (20% of progress)
   ${If} $SkipClaude == "false"
-    ${NSD_SetText} $CurrentOperation "Installing Claude Code CLI..."
+    ${If} $CompatibleDistribution != ""
+      ${NSD_SetText} $CurrentOperation "Installing Claude Code CLI in $CompatibleDistribution..."
+      DetailPrint "Installing Claude Code in existing distribution: $CompatibleDistribution"
+    ${Else}
+      ${NSD_SetText} $CurrentOperation "Installing Claude Code CLI in Alpine..."
+      DetailPrint "Installing Claude Code in Alpine Linux"
+    ${EndIf}
     SendMessage $ProgressBar ${PBM_SETPOS} 80 0
-    Call InstallClaudeCodeCLI
+    Call InstallClaudeCodeInDistribution
     SendMessage $ProgressBar ${PBM_SETPOS} 90 0
   ${Else}
     DetailPrint "Claude Code already installed, skipping"
@@ -644,19 +934,35 @@ Function InstallAlpineLinux
   ${EndIf}
 FunctionEnd
 
-; Node.js Installation in Alpine Function
-Function InstallNodeJSInAlpine
-  DetailPrint "Verifying Node.js installation in Alpine Linux..."
+; Node.js Installation in Distribution Function
+Function InstallNodeJSInDistribution
+  ; Determine target distribution
+  StrCpy $5 "Alpine"
+  ${If} $CompatibleDistribution != ""
+    ${If} $CompatibleDistribution == "default"
+      StrCpy $5 ""
+    ${Else}
+      StrCpy $5 $CompatibleDistribution
+    ${EndIf}
+  ${EndIf}
   
-  ; Check if Node.js is already installed from Alpine setup script
-  nsExec::ExecToStack 'wsl -d Alpine -- node --version'
+  DetailPrint "Verifying Node.js installation in WSL distribution: $5"
+  
+  ; Build WSL command
+  StrCpy $6 "wsl"
+  ${If} $5 != ""
+    StrCpy $6 "$6 -d $5"
+  ${EndIf}
+  
+  ; Check if Node.js is already installed
+  nsExec::ExecToStack '$6 -- node --version'
   Pop $0
   Pop $1
   
   ${If} $0 == 0
     DetailPrint "Node.js already available: $1"
     ; Check if version is adequate
-    nsExec::ExecToStack 'wsl -d Alpine -- npm --version'
+    nsExec::ExecToStack '$6 -- npm --version'
     Pop $2
     Pop $3
     ${If} $2 == 0
@@ -667,17 +973,44 @@ Function InstallNodeJSInAlpine
   ${EndIf}
   
   ; Install Node.js if not available or insufficient
-  DetailPrint "Installing Node.js and npm in Alpine Linux..."
-  nsExec::ExecToLog 'wsl -d Alpine -- sh -c "apk update && apk add nodejs npm"'
+  DetailPrint "Installing Node.js and npm in WSL distribution: $5"
+  
+  ; Use distribution-specific package manager
+  ${If} $5 == "Alpine"
+    nsExec::ExecToLog '$6 -- sh -c "apk update && apk add nodejs npm"'
+  ${ElseIf} $5 == "debian"
+  ${OrIf} $5 == "Ubuntu"
+  ${OrIf} $5 == "Ubuntu-18.04"
+  ${OrIf} $5 == "Ubuntu-20.04"
+  ${OrIf} $5 == "Ubuntu-22.04"
+  ${OrIf} $5 == "kali-linux"
+  ${OrIf} $5 == "Pengwin"
+    nsExec::ExecToLog '$6 -- sh -c "apt update && apt install -y nodejs npm"'
+  ${ElseIf} $5 == "fedora"
+  ${OrIf} $5 == "CentOS"
+  ${OrIf} $5 == "RHEL"
+  ${OrIf} $5 == "OracleLinux"
+    nsExec::ExecToLog '$6 -- sh -c "dnf install -y nodejs npm"'
+  ${ElseIf} $5 == "openSUSE-Leap"
+  ${OrIf} $5 == "openSUSE-Tumbleweed"
+  ${OrIf} $5 == "SLES"
+    nsExec::ExecToLog '$6 -- sh -c "zypper install -y nodejs npm"'
+  ${ElseIf} $5 == "Arch"
+    nsExec::ExecToLog '$6 -- sh -c "pacman -S --noconfirm nodejs npm"'
+  ${Else}
+    ; Try common package managers for unknown distributions
+    nsExec::ExecToLog '$6 -- sh -c "apt update && apt install -y nodejs npm || dnf install -y nodejs npm || zypper install -y nodejs npm || pacman -S --noconfirm nodejs npm || apk add nodejs npm"'
+  ${EndIf}
+  
   Pop $0
   ${If} $0 != 0
-    DetailPrint "Error installing Node.js in Alpine: $0"
-    MessageBox MB_OK|MB_ICONSTOP "Failed to install Node.js in Alpine Linux. Error code: $0$\n$\nPlease check Alpine Linux is working properly."
+    DetailPrint "Error installing Node.js in $5: $0"
+    MessageBox MB_OK|MB_ICONSTOP "Failed to install Node.js in WSL distribution $5. Error code: $0$\n$\nPlease check the distribution is working properly."
     Abort
   ${EndIf}
   
   ; Verify final installation
-  nsExec::ExecToStack 'wsl -d Alpine -- node --version'
+  nsExec::ExecToStack '$6 -- node --version'
   Pop $0
   Pop $1
   ${If} $0 == 0
@@ -688,43 +1021,59 @@ Function InstallNodeJSInAlpine
 FunctionEnd
 
 ; Claude Code CLI Installation Function
-Function InstallClaudeCodeCLI
-  DetailPrint "Installing Claude Code CLI in Alpine Linux..."
+Function InstallClaudeCodeInDistribution
+  ; Determine target distribution
+  StrCpy $5 "Alpine"
+  ${If} $CompatibleDistribution != ""
+    ${If} $CompatibleDistribution == "default"
+      StrCpy $5 ""
+    ${Else}
+      StrCpy $5 $CompatibleDistribution
+    ${EndIf}
+  ${EndIf}
+  
+  DetailPrint "Installing Claude Code CLI in WSL distribution: $5"
+  
+  ; Build WSL command
+  StrCpy $6 "wsl"
+  ${If} $5 != ""
+    StrCpy $6 "$6 -d $5"
+  ${EndIf}
   
   ; Ensure npm is configured properly for global installations
   DetailPrint "Configuring npm environment..."
-  nsExec::ExecToLog 'wsl -d Alpine -- sh -c "mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global"'
+  nsExec::ExecToLog '$6 -- sh -c "mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global"'
   
-  ; Install Claude Code CLI globally in Alpine
+  ; Install Claude Code CLI globally
   DetailPrint "Installing @anthropic-ai/claude-code..."
-  nsExec::ExecToLog 'wsl -d Alpine -- npm install -g @anthropic-ai/claude-code'
+  nsExec::ExecToLog '$6 -- npm install -g @anthropic-ai/claude-code'
   Pop $0
   ${If} $0 != 0
     DetailPrint "Error installing Claude Code CLI: $0"
     ; Try alternative installation method
     DetailPrint "Trying alternative npm installation..."
-    nsExec::ExecToLog 'wsl -d Alpine -- sh -c "export PATH=$PATH:~/.npm-global/bin && npm install -g @anthropic-ai/claude-code"'
+    nsExec::ExecToLog '$6 -- sh -c "export PATH=$PATH:~/.npm-global/bin && npm install -g @anthropic-ai/claude-code"'
     Pop $1
     ${If} $1 != 0
-      MessageBox MB_OK|MB_ICONSTOP "Failed to install Claude Code CLI. Error codes: $0, $1$\n$\nPlease verify:$\n- Internet connection is working$\n- npm is properly configured$\n- Alpine Linux has sufficient disk space"
+      MessageBox MB_OK|MB_ICONSTOP "Failed to install Claude Code CLI. Error codes: $0, $1$\n$\nPlease verify:$\n- Internet connection is working$\n- npm is properly configured$\n- WSL distribution has sufficient disk space"
       Abort
     ${EndIf}
   ${EndIf}
   
   ; Verify Claude Code installation and PATH
   DetailPrint "Verifying Claude Code installation..."
-  nsExec::ExecToStack 'wsl -d Alpine -- sh -c "export PATH=$PATH:~/.npm-global/bin && claude --version"'
+  nsExec::ExecToStack '$6 -- sh -c "export PATH=$PATH:~/.npm-global/bin && claude --version"'
   Pop $0
   Pop $1
   ${If} $0 == 0
     DetailPrint "Claude Code CLI installed successfully: $1"
     ; Ensure PATH is configured for future use
-    nsExec::ExecToLog 'wsl -d Alpine -- sh -c "echo \"export PATH=\\$PATH:~/.npm-global/bin\" >> ~/.bashrc"'
-    nsExec::ExecToLog 'wsl -d Alpine -- sh -c "echo \"export PATH=\\$PATH:~/.npm-global/bin\" >> ~/.profile"'
+    nsExec::ExecToLog '$6 -- sh -c "echo \"export PATH=\\$PATH:~/.npm-global/bin\" >> ~/.bashrc"'
+    nsExec::ExecToLog '$6 -- sh -c "echo \"export PATH=\\$PATH:~/.npm-global/bin\" >> ~/.profile"'
     DetailPrint "Claude Code CLI is ready to use"
   ${Else}
     DetailPrint "Warning: Could not verify Claude Code installation"
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Claude Code installation completed but verification failed.$\n$\nYou may need to configure your PATH manually in Alpine Linux:$\nexport PATH=$$PATH:~/.npm-global/bin"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Claude Code installation completed but verification failed.$\n$\nYou may need to configure your PATH manually in the WSL distribution:$\nexport PATH=$$PATH:~/.npm-global/bin"
   ${EndIf}
 FunctionEnd
 
@@ -752,13 +1101,36 @@ FunctionEnd
 Function CreateShortcuts
   DetailPrint "Creating Windows shortcuts..."
   
-  ; Create desktop shortcut
-  CreateShortCut "$DESKTOP\Claude Code.lnk" "wsl" "-d Alpine -- claude" "$INSTDIR\generated-images\claude-icon.ico"
+  ; Determine target distribution for shortcuts
+  StrCpy $5 "Alpine"
+  ${If} $CompatibleDistribution != ""
+    ${If} $CompatibleDistribution != "default"
+      StrCpy $5 $CompatibleDistribution
+    ${Else}
+      StrCpy $5 "default"
+    ${EndIf}
+  ${EndIf}
+  
+  DetailPrint "Creating shortcuts for WSL distribution: $5"
+  
+  ; Create desktop shortcut (no icon for testing)
+  ${If} $5 == "default"
+    CreateShortCut "$DESKTOP\Claude Code.lnk" "wsl" "-- claude"
+  ${Else}
+    CreateShortCut "$DESKTOP\Claude Code.lnk" "wsl" "-d $5 -- claude"
+  ${EndIf}
   
   ; Create Start Menu shortcuts
   CreateDirectory "$SMPROGRAMS\Claude Code"
-  CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code.lnk" "wsl" "-d Alpine -- claude" "$INSTDIR\generated-images\claude-icon.ico"
-  CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code Terminal.lnk" "wsl" "-d Alpine" "$INSTDIR\generated-images\claude-icon.ico"
+  
+  ${If} $5 == "default"
+    CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code.lnk" "wsl" "-- claude"
+    CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code Terminal.lnk" "wsl" ""
+  ${Else}
+    CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code.lnk" "wsl" "-d $5 -- claude"
+    CreateShortCut "$SMPROGRAMS\Claude Code\Claude Code Terminal.lnk" "wsl" "-d $5"
+  ${EndIf}
+  
   CreateShortCut "$SMPROGRAMS\Claude Code\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
   
   DetailPrint "Shortcuts created successfully"
@@ -812,4 +1184,6 @@ Function .onInit
   StrCpy $SkipGit "false"
   StrCpy $SkipCurl "false"
   StrCpy $SkipClaude "false"
+  StrCpy $SkipAlpine "false"
+  StrCpy $CompatibleDistribution ""
 FunctionEnd

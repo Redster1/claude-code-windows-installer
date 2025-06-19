@@ -1,0 +1,1 @@
+- You'll need to run any make or build commands in the nix-shell.
