@@ -48,10 +48,15 @@ pkgs.mkShell {
     echo ""
     
     # Install PSScriptAnalyzer if not already installed
+    echo "Setting up PowerShell linting environment..."
     if ! pwsh -c "Get-Module -ListAvailable PSScriptAnalyzer" >/dev/null 2>&1; then
       echo "Installing PSScriptAnalyzer..."
       pwsh -c "Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser" >/dev/null 2>&1 || true
     fi
+    
+    # Add PowerShell validation alias
+    alias validate-ps="pwsh -File tools/validate-powershell.ps1"
+    alias lint-all="make validate-powershell"
     
     # Set up development aliases
     alias build="make build"

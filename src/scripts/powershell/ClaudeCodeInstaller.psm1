@@ -25,12 +25,12 @@ function Write-Log {
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     $logEntry = "[$timestamp] [$Level] $Message"
     
-    # Write to console with colors
+    # Write to console (use Write-Output for NSIS compatibility)
     switch ($Level) {
-        'Info'    { Write-Host $logEntry -ForegroundColor White }
-        'Warning' { Write-Host $logEntry -ForegroundColor Yellow }
-        'Error'   { Write-Host $logEntry -ForegroundColor Red }
-        'Success' { Write-Host $logEntry -ForegroundColor Green }
+        'Info'    { Write-Output "INFO: $Message" }
+        'Warning' { Write-Output "WARNING: $Message" }
+        'Error'   { Write-Output "ERROR: $Message" }
+        'Success' { Write-Output "SUCCESS: $Message" }
     }
     
     # Write to log file
@@ -38,7 +38,8 @@ function Write-Log {
         Add-Content -Path $script:LogPath -Value $logEntry -Encoding UTF8
     }
     catch {
-        # If we can't write to log, continue anyway
+        # If we can't write to log, continue anyway (silent fail for logging)
+        Write-Verbose "Failed to write to log file: $($_.Exception.Message)"
     }
 }
 
@@ -225,6 +226,7 @@ function Test-HyperVSupport {
         }
         catch {
             # Features may not be available on all Windows editions
+            Write-Verbose "Windows optional features not available: $($_.Exception.Message)"
         }
         
         # Check if virtualization is enabled in BIOS
@@ -245,8 +247,8 @@ function Test-HyperVSupport {
         
         return @{
             Passed = $virtualizationEnabled
-            HyperVAvailable = $hyperVFeature -ne $null
-            VMPlatformAvailable = $vmPlatform -ne $null
+            HyperVAvailable = $null -ne $hyperVFeature
+            VMPlatformAvailable = $null -ne $vmPlatform
             VirtualizationEnabled = $virtualizationEnabled
             Message = if ($virtualizationEnabled) { "Virtualization support available" } else { "Virtualization must be enabled in BIOS" }
         }
@@ -271,6 +273,7 @@ function Test-AntivirusInterference {
         }
         catch {
             # Windows Defender module may not be available
+            Write-Verbose "Windows Defender module not available: $($_.Exception.Message)"
         }
         
         # Check for other antivirus products
@@ -280,6 +283,7 @@ function Test-AntivirusInterference {
         }
         catch {
             # SecurityCenter2 may not be available on all systems
+            Write-Verbose "SecurityCenter2 not available: $($_.Exception.Message)"
         }
         
         return @{
@@ -779,7 +783,7 @@ function Install-AlpineLinux {
         
         return @{
             Success = $true
-            AlreadyInstalled = $alpineExists -ne $null
+            AlreadyInstalled = $null -ne $alpineExists
             DistributionName = $alpine.Name
             State = $alpine.State
             IsDefault = $SetAsDefault

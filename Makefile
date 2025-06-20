@@ -5,14 +5,14 @@ DIST_DIR := dist
 SRC_DIR := src
 NSIS := makensis
 
-.PHONY: all clean build sign test dev-setup
+.PHONY: all clean build sign test dev-setup validate-powershell lint
 
 all: clean build
 
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-build: prepare
+build-only: prepare
 	@echo "Building Claude Code installer v$(VERSION)..."
 	$(NSIS) -DVERSION=$(VERSION) \
 	        -DDIST_DIR=$(DIST_DIR) \
@@ -45,15 +45,36 @@ dev-setup:
 	@command -v node >/dev/null 2>&1 || { echo "Node.js not found. Install with: nix-env -iA nixpkgs.nodejs"; exit 1; }
 	@echo "Development environment ready!"
 
+validate-powershell:
+	@echo "Validating PowerShell modules..."
+	@for module in $(shell find $(SRC_DIR)/scripts/powershell -name "*.psm1"); do \
+		echo "Validating $$module..."; \
+		pwsh -File tools/validate-powershell.ps1 -ModulePath "$$module" || exit 1; \
+	done
+	@echo "✅ All PowerShell modules validated successfully"
+
+lint: validate-powershell
+	@echo "Linting completed successfully"
+
+build: validate-powershell prepare
+	@echo "Building Claude Code installer v$(VERSION)..."
+	$(NSIS) -DVERSION=$(VERSION) \
+	        -DDIST_DIR=$(DIST_DIR) \
+	        -DASSETS_DIR=generated-images \
+	        -DBUILD_DIR=$(BUILD_DIR) \
+	        $(SRC_DIR)/installer/main.nsi
+
 help:
 	@echo "Claude Code Windows Installer Build System"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  all        - Clean and build installer"
-	@echo "  clean      - Remove build artifacts"
-	@echo "  build      - Build installer executable"
-	@echo "  prepare    - Prepare build directory"
-	@echo "  sign       - Code sign installer (Windows only)"
-	@echo "  test       - Run test suite"
-	@echo "  dev-setup  - Check development environment"
-	@echo "  help       - Show this help message"
+	@echo "  all                - Clean and build installer"
+	@echo "  clean              - Remove build artifacts"
+	@echo "  build              - Build installer executable (includes validation)"
+	@echo "  prepare            - Prepare build directory"
+	@echo "  validate-powershell - Validate all PowerShell modules"
+	@echo "  lint               - Run all linting (alias for validate-powershell)"
+	@echo "  sign               - Code sign installer (Windows only)"
+	@echo "  test               - Run test suite"
+	@echo "  dev-setup          - Check development environment"
+	@echo "  help               - Show this help message"
