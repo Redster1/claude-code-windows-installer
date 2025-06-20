@@ -105,7 +105,7 @@ function Update-InstallationProgress {
         # Create Node.js script to update progress
         $updateScript = @'
 const ProgressTracker = require('$($script:NodeTrackerPath.Replace('\', '/'))'.replace('$($script:NodeTrackerPath.Replace('\', '/'))', '$($script:NodeTrackerPath.Replace('\', '/'))');
-const tracker = ProgressTracker.loadState() || new ProgressTracker(10);
+const tracker = ProgressTracker.loadState() ? ProgressTracker.loadState() : new ProgressTracker(10);
 
 const details = $($detailsJson);
 const result = tracker.updateProgress('$($StepName)', '$($Status)', details);
