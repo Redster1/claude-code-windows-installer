@@ -31,7 +31,7 @@ function Initialize-ProgressTracker {
         [string]$NodeScriptPath = $null
     )
     
-    Write-Host "🔧 Initializing progress tracking system..." -ForegroundColor Cyan
+    Write-Output "Initializing progress tracking system..."
     
     # Find Node.js tracker script
     if (-not $NodeScriptPath) {
@@ -59,7 +59,7 @@ console.log('Progress tracker initialized with $TotalSteps steps');
         Remove-Item $tempScriptPath -Force -ErrorAction SilentlyContinue
         
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ Progress tracking initialized successfully" -ForegroundColor Green
+            Write-Output "Progress tracking initialized successfully"
             return $true
         } else {
             Write-Warning "Failed to initialize progress tracker: $result"
@@ -128,33 +128,17 @@ console.log(JSON.stringify({
             $progressData = $result | ConvertFrom-Json
             
             # Display progress in PowerShell
-            $statusEmoji = @{
-                'starting' = '🔄'
-                'in_progress' = '⏳'
-                'completed' = '✅'
-                'failed' = '❌'
-                'skipped' = '⏭️'
-            }
             
-            $emoji = $statusEmoji[$Status]
             $progressPercent = [math]::Round($progressData.progress, 1)
-            
-            Write-Host "$emoji [$progressPercent%] $StepName" -ForegroundColor $(
-                switch ($Status) {
-                    'completed' { 'Green' }
-                    'failed' { 'Red' }
-                    'skipped' { 'Yellow' }
-                    default { 'Cyan' }
-                }
-            )
+            Write-Output "[$progressPercent%] $StepName"
             
             # Show warnings or errors
             if ($Details.warning) {
-                Write-Host "   ⚠️  Warning: $($Details.warning)" -ForegroundColor Yellow
+                Write-Output "   Warning: $($Details.warning)"
             }
             
             if ($Status -eq 'failed' -and $Details.error) {
-                Write-Host "   💥 Error: $($Details.error)" -ForegroundColor Red
+                Write-Output "   Error: $($Details.error)"
             }
             
             return $progressData
@@ -188,10 +172,10 @@ function Start-InstallationPhase {
         [int]$PhaseSteps = $null
     )
     
-    Write-Host ""
-    Write-Host "🚀 Starting Phase: $PhaseName" -ForegroundColor Magenta
+    Write-Output ""
+    Write-Output "Starting Phase: $PhaseName"
     if ($PhaseSteps) {
-        Write-Host "   Expected steps: $PhaseSteps" -ForegroundColor Gray
+        Write-Output "   Expected steps: $PhaseSteps"
     }
     
     $details = @{ phase = $PhaseName }
@@ -228,7 +212,7 @@ function Complete-InstallationPhase {
     
     $result = Update-InstallationProgress -StepName "Completed $PhaseName" -Status 'completed' -Details $details
     
-    Write-Host "✨ Phase completed: $PhaseName" -ForegroundColor Green
+    Write-Output "Phase completed: $PhaseName"
     
     return $result
 }
@@ -425,25 +409,9 @@ function Write-SimpleProgress {
         [string]$Status
     )
     
-    $statusEmoji = @{
-        'starting' = '🔄'
-        'in_progress' = '⏳'
-        'completed' = '✅'
-        'failed' = '❌'
-        'skipped' = '⏭️'
-    }
-    
-    $emoji = if ($statusEmoji[$Status]) { $statusEmoji[$Status] } else { '📍' }
     $timestamp = Get-Date -Format "HH:mm:ss"
     
-    Write-Host "$emoji [$timestamp] $StepName" -ForegroundColor $(
-        switch ($Status) {
-            'completed' { 'Green' }
-            'failed' { 'Red' }
-            'skipped' { 'Yellow' }
-            default { 'Cyan' }
-        }
-    )
+    Write-Output "[$timestamp] $StepName"
 }
 
 #endregion

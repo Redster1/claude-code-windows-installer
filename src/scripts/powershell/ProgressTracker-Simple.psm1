@@ -31,34 +31,18 @@ function Update-InstallationProgress {
     )
     
     try {
-        # Use simple PowerShell progress display 
-        $statusEmoji = @{
-            'starting' = '🔄'
-            'in_progress' = '⏳' 
-            'completed' = '✅'
-            'failed' = '❌'
-            'skipped' = '⏭️'
-        }
-        
-        $emoji = if ($statusEmoji[$Status]) { $statusEmoji[$Status] } else { '📍' }
+        # Use simple PowerShell progress display
         $timestamp = Get-Date -Format "HH:mm:ss"
         
-        Write-Host "$emoji [$timestamp] $StepName" -ForegroundColor $(
-            switch ($Status) {
-                'completed' { 'Green' }
-                'failed' { 'Red' }
-                'skipped' { 'Yellow' }
-                default { 'Cyan' }
-            }
-        )
+        Write-Output "[$timestamp] $StepName"
         
         # Show warnings or errors
         if ($Details.warning) {
-            Write-Host "   ⚠️  Warning: $($Details.warning)" -ForegroundColor Yellow
+            Write-Output "   Warning: $($Details.warning)"
         }
         
         if ($Status -eq 'failed' -and $Details.error) {
-            Write-Host "   💥 Error: $($Details.error)" -ForegroundColor Red
+            Write-Output "   Error: $($Details.error)"
         }
         
         # Return simple progress data
@@ -82,10 +66,10 @@ function Start-InstallationPhase {
         [int]$PhaseSteps = $null
     )
     
-    Write-Host ""
-    Write-Host "🚀 Starting Phase: $PhaseName" -ForegroundColor Magenta
+    Write-Output ""
+    Write-Output "Starting Phase: $PhaseName"
     if ($PhaseSteps) {
-        Write-Host "   Expected steps: $PhaseSteps" -ForegroundColor Gray
+        Write-Output "   Expected steps: $PhaseSteps"
     }
     
     return Update-InstallationProgress -StepName "Starting $PhaseName" -Status 'starting'
@@ -99,7 +83,7 @@ function Complete-InstallationPhase {
     )
     
     $result = Update-InstallationProgress -StepName "Completed $PhaseName" -Status 'completed' -Details $Summary
-    Write-Host "✨ Phase completed: $PhaseName" -ForegroundColor Green
+    Write-Output "Phase completed: $PhaseName"
     return $result
 }
 
