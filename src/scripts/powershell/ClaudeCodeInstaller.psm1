@@ -759,51 +759,35 @@ function Initialize-AlpineConfiguration {
         $rootCheck = & wsl -d $DistributionName --exec whoami 2>$null
         Write-Log "Current Alpine user: $rootCheck" -Level Info
         
-        # Create setup script for Alpine (using single quotes to avoid PowerShell parsing issues)
-        $setupScript = @'
-#!/bin/sh
-# Alpine Linux setup for Claude Code installer
-echo "=== Alpine Linux Configuration ==="
-
-# Update package repository
-echo "Updating package repository..."
-apk update 2>/dev/null || echo "Warning: Could not update package repository"
-
-# Install essential packages
-echo "Installing essential packages..."
-apk add --no-cache curl wget git nodejs npm 2>/dev/null || echo "Warning: Some packages may not be available"
-
-# Create user if specified and not root
-if [ "$1" != "root" ] && [ ! -z "$1" ]; then
-    if ! id "$1" >/dev/null 2>&1; then
-        echo "Creating user: $1"
-        adduser -D -s /bin/sh "$1"
-        echo "User $1 created successfully"
-    else
-        echo "User $1 already exists"
-    fi
-fi
-
-# Verify essential tools
-echo "=== Verification ==="
-echo "curl: $(curl --version 2>/dev/null | head -1 || echo 'Not available')"
-echo "git: $(git --version 2>/dev/null || echo 'Not available')"  
-echo "node: $(node --version 2>/dev/null || echo 'Not available')"
-echo "npm: $(npm --version 2>/dev/null || echo 'Not available')"
-
-echo "Alpine Linux configuration completed"
-'@
+        # Use direct commands instead of complex bash script to avoid PowerShell parsing issues
+        Write-Log "Updating package repository..." -Level Info
+        & wsl -d $DistributionName --exec apk update 2>$null
         
-        $setupScriptPath = "$env:TEMP\alpine-setup.sh"
-        $setupScript | Out-File -FilePath $setupScriptPath -Encoding UTF8
+        Write-Log "Installing essential packages..." -Level Info
+        & wsl -d $DistributionName --exec apk add --no-cache curl wget git nodejs npm 2>$null
         
-        # Copy setup script to Alpine and execute
-        & wsl -d $DistributionName --exec sh -c "cat > /tmp/setup.sh" < $setupScriptPath
-        $setupOutput = & wsl -d $DistributionName --exec sh /tmp/setup.sh $Username 2>&1
+        # Create user if needed
+        if ($Username -ne "root") {
+            Write-Log "Checking/creating user: $Username" -Level Info
+            $userExists = & wsl -d $DistributionName --exec id $Username 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                & wsl -d $DistributionName --exec adduser -D -s /bin/sh $Username 2>$null
+                Write-Log "Created user: $Username" -Level Info
+            }
+        }
         
-        # Clean up
-        Remove-Item $setupScriptPath -Force -ErrorAction SilentlyContinue
-        & wsl -d $DistributionName --exec rm -f /tmp/setup.sh 2>$null
+        # Verify tools installation
+        Write-Log "Verifying tool installation..." -Level Info
+        $curlVersion = & wsl -d $DistributionName --exec curl --version 2>$null | Select-Object -First 1
+        $gitVersion = & wsl -d $DistributionName --exec git --version 2>$null
+        $nodeVersion = & wsl -d $DistributionName --exec node --version 2>$null
+        $npmVersion = & wsl -d $DistributionName --exec npm --version 2>$null
+        
+        $setupOutput = "Alpine Linux configuration completed.`n"
+        $setupOutput += "curl: $(if ($curlVersion) { $curlVersion } else { 'Not available' })`n"
+        $setupOutput += "git: $(if ($gitVersion) { $gitVersion } else { 'Not available' })`n"
+        $setupOutput += "node: $(if ($nodeVersion) { $nodeVersion } else { 'Not available' })`n"
+        $setupOutput += "npm: $(if ($npmVersion) { $npmVersion } else { 'Not available' })`n"
         
         Write-Log "Alpine configuration output: $setupOutput" -Level Info
         

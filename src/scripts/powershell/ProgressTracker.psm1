@@ -103,12 +103,12 @@ function Update-InstallationProgress {
         $detailsJson = $Details | ConvertTo-Json -Compress -Depth 3
         
         # Create Node.js script to update progress
-        $updateScript = @"
-const ProgressTracker = require('$($script:NodeTrackerPath.Replace('\', '/'))');
+        $updateScript = @'
+const ProgressTracker = require('$($script:NodeTrackerPath.Replace('\', '/'))'.replace('$($script:NodeTrackerPath.Replace('\', '/'))', '$($script:NodeTrackerPath.Replace('\', '/'))');
 const tracker = ProgressTracker.loadState() || new ProgressTracker(10);
 
-const details = $detailsJson;
-const result = tracker.updateProgress('$StepName', '$Status', details);
+const details = $($detailsJson);
+const result = tracker.updateProgress('$($StepName)', '$($Status)', details);
 
 console.log(JSON.stringify({
     success: true,
@@ -116,7 +116,7 @@ console.log(JSON.stringify({
     progress: Math.min((tracker.currentStep / tracker.totalSteps) * 100, 100),
     estimatedTimeRemaining: tracker.state.estimatedTimeRemaining
 }));
-"@
+'@.Replace('$($script:NodeTrackerPath.Replace('\', '/'))', $script:NodeTrackerPath.Replace('\', '/')).Replace('$($detailsJson)', $detailsJson).Replace('$($StepName)', $StepName).Replace('$($Status)', $Status)
         
         $tempScriptPath = "$env:TEMP\update-progress.js"
         $updateScript | Out-File -FilePath $tempScriptPath -Encoding UTF8
@@ -433,7 +433,7 @@ function Write-SimpleProgress {
         'skipped' = '⏭️'
     }
     
-    $emoji = $statusEmoji[$Status] || '📍'
+    $emoji = if ($statusEmoji[$Status]) { $statusEmoji[$Status] } else { '📍' }
     $timestamp = Get-Date -Format "HH:mm:ss"
     
     Write-Host "$emoji [$timestamp] $StepName" -ForegroundColor $(
