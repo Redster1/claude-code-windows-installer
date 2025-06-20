@@ -1165,5 +1165,7 @@ Export-ModuleMember -Function @(
     'Install-WSL2',
     'Install-AlpineLinux',
     'Test-RebootRequired',
-    'Request-RebootWithContinuation'
+    'Request-RebootWithContinuation',
+    'Get-InstallationState',
+    'Clear-InstallationState'
 )

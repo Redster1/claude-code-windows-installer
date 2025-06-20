@@ -1019,7 +1019,7 @@ Function InstallWSL2Features
   DetailPrint "Installing WSL2 using comprehensive PowerShell module..."
   
   ; Use PowerShell module for sophisticated WSL2 installation
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; $result = Install-WSL2 -SkipIfExists; if ($result.Success) { if ($result.RebootRequired) { Write-Output \"WSL2_REBOOT_REQUIRED: $($result.Message)\"; exit 2 } else { Write-Output \"WSL2_SUCCESS: $($result.Message)\"; exit 0 } } else { Write-Error \"WSL2_FAILED: $($result.Message)\"; exit 1 }"'
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; $result = Install-WSL2 -SkipIfExists; if ($result.Success) { if ($result.RebootRequired) { Write-Output \"WSL2_REBOOT_REQUIRED: $($result.Message)\"; exit 2 } else { Write-Output \"WSL2_SUCCESS: $($result.Message)\"; exit 0 } } else { Write-Output \"WSL2_FAILED: $($result.Message)\"; exit 1 }"'
   Pop $0 ; Exit code
   Pop $1 ; Output message
   
@@ -1055,7 +1055,7 @@ Function InstallAlpineLinux
   DetailPrint "Installing and configuring Alpine Linux using comprehensive PowerShell module..."
   
   ; Use PowerShell module for sophisticated Alpine installation and configuration
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; $result = Install-AlpineLinux -SkipIfExists -SetAsDefault; if ($result.Success) { Write-Output \"ALPINE_SUCCESS: $($result.Message)\"; exit 0 } else { Write-Error \"ALPINE_FAILED: $($result.Message)\"; exit 1 }"'
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; $result = Install-AlpineLinux -SkipIfExists -SetAsDefault; if ($result.Success) { Write-Output \"ALPINE_SUCCESS: $($result.Message)\"; exit 0 } else { Write-Output \"ALPINE_FAILED: $($result.Message)\"; exit 1 }"'
   Pop $0 ; Exit code
   Pop $1 ; Output message
   
@@ -1217,7 +1217,7 @@ Function ValidateSystemRequirements
   DetailPrint "Validating system requirements using comprehensive PowerShell module..."
   
   ; Use PowerShell module for comprehensive system validation
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; $result = Test-SystemRequirements; if ($result.OverallResult.Passed) { Write-Output \"VALIDATION_PASSED: $($result.OverallResult.Summary)\"; exit 0 } else { Write-Error \"VALIDATION_FAILED: $($result.OverallResult.Summary)\"; exit 1 }"'
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; $result = Test-SystemRequirements; if ($result.OverallResult.Passed) { Write-Output \"VALIDATION_PASSED: $($result.OverallResult.Summary)\"; exit 0 } else { Write-Output \"VALIDATION_FAILED: $($result.OverallResult.Summary)\"; exit 1 }"'
   Pop $0 ; Exit code
   Pop $1 ; Output
   
