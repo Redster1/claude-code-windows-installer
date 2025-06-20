@@ -1011,29 +1011,29 @@ function Request-RebootWithContinuation {
 
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 
-Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "Claude Code Installer - Resuming Installation" -ForegroundColor Cyan
-Write-Host "============================================" -ForegroundColor Cyan
-Write-Host ""
+Write-Output "============================================"
+Write-Output "Claude Code Installer - Resuming Installation"
+Write-Output "============================================"
+Write-Output ""
 
 try {
     # Load installation state
     if (Test-Path "$stateFile") {
         `$state = Get-Content "$stateFile" -Raw | ConvertFrom-Json
-        Write-Host "Resuming from phase: `$(`$state.Phase)" -ForegroundColor Green
-        Write-Host "Completed steps: `$(`$state.CompletedSteps -join ', ')" -ForegroundColor Green
-        Write-Host ""
+        Write-Output "Resuming from phase: $(`$state.Phase)"
+        Write-Output "Completed steps: $(`$state.CompletedSteps -join ', ')"
+        Write-Output ""
     }
     
     # Launch installer with continuation phase
-    Write-Host "Launching installer continuation..." -ForegroundColor Yellow
+    Write-Output "Launching installer continuation..."
     Start-Process -FilePath "$InstallerPath" -ArgumentList "/PHASE=$ContinuationPhase", "/SILENT" -Wait
     
-    Write-Host "Installation continuation completed." -ForegroundColor Green
+    Write-Output "Installation continuation completed."
 }
 catch {
-    Write-Host "Error during installation continuation: `$(`$_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Please run the installer manually." -ForegroundColor Yellow
+    Write-Output "Error during installation continuation: $(`$_.Exception.Message)"
+    Write-Output "Please run the installer manually."
     Read-Host "Press Enter to continue"
 }
 
