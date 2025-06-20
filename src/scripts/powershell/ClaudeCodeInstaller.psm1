@@ -759,8 +759,8 @@ function Initialize-AlpineConfiguration {
         $rootCheck = & wsl -d $DistributionName --exec whoami 2>$null
         Write-Log "Current Alpine user: $rootCheck" -Level Info
         
-        # Create setup script for Alpine
-        $setupScript = @"
+        # Create setup script for Alpine (using single quotes to avoid PowerShell parsing issues)
+        $setupScript = @'
 #!/bin/sh
 # Alpine Linux setup for Claude Code installer
 echo "=== Alpine Linux Configuration ==="
@@ -786,13 +786,13 @@ fi
 
 # Verify essential tools
 echo "=== Verification ==="
-echo "curl: \$(curl --version 2>/dev/null | head -1 || echo 'Not available')"
-echo "git: \$(git --version 2>/dev/null || echo 'Not available')"  
-echo "node: \$(node --version 2>/dev/null || echo 'Not available')"
-echo "npm: \$(npm --version 2>/dev/null || echo 'Not available')"
+echo "curl: $(curl --version 2>/dev/null | head -1 || echo 'Not available')"
+echo "git: $(git --version 2>/dev/null || echo 'Not available')"  
+echo "node: $(node --version 2>/dev/null || echo 'Not available')"
+echo "npm: $(npm --version 2>/dev/null || echo 'Not available')"
 
 echo "Alpine Linux configuration completed"
-"@
+'@
         
         $setupScriptPath = "$env:TEMP\alpine-setup.sh"
         $setupScript | Out-File -FilePath $setupScriptPath -Encoding UTF8
