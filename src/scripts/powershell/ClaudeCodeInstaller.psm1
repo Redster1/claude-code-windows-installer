@@ -94,19 +94,31 @@ function Test-SystemRequirements {
 }
 
 function Test-WindowsVersion {
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem
-    $buildNumber = [int]$os.BuildNumber
-    $version = $os.Version
-    
-    $passed = $buildNumber -ge $script:MinWindowsBuild
-    
-    return @{
-        Passed = $passed
-        BuildNumber = $buildNumber
-        Version = $version
-        ProductName = $os.Caption
-        MinRequired = $script:MinWindowsBuild
-        Message = if ($passed) { "Windows version compatible" } else { "Windows version too old. Requires build $script:MinWindowsBuild or later" }
+    try {
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+        $buildNumber = [int]$os.BuildNumber
+        $version = $os.Version
+        
+        $passed = $buildNumber -ge $script:MinWindowsBuild
+        
+        return @{
+            Passed = $passed
+            BuildNumber = $buildNumber
+            Version = $version
+            ProductName = $os.Caption
+            MinRequired = $script:MinWindowsBuild
+            Message = if ($passed) { "Windows version compatible" } else { "Windows version too old. Requires build $script:MinWindowsBuild or later" }
+        }
+    }
+    catch {
+        return @{
+            Passed = $false
+            BuildNumber = 0
+            Version = "Unknown"
+            ProductName = "Unknown"
+            MinRequired = $script:MinWindowsBuild
+            Message = "Could not determine Windows version: $($_.Exception.Message)"
+        }
     }
 }
 
@@ -122,16 +134,30 @@ function Test-Architecture {
 }
 
 function Test-DiskSpace {
-    $systemDrive = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $env:SystemDrive }
-    $freeSpaceGB = [math]::Round($systemDrive.FreeSpace / 1GB, 2)
-    $requiredGB = 10
-    $passed = $freeSpaceGB -ge $requiredGB
-    
-    return @{
-        Passed = $passed
-        FreeSpaceGB = $freeSpaceGB
-        RequiredGB = $requiredGB
-        Message = if ($passed) { "$freeSpaceGB GB available (sufficient)" } else { "Insufficient disk space. Need $requiredGB GB, have $freeSpaceGB GB" }
+    try {
+        $systemDrive = Get-CimInstance -ClassName Win32_LogicalDisk -ErrorAction Stop | Where-Object { $_.DeviceID -eq $env:SystemDrive }
+        if (-not $systemDrive) {
+            throw "Could not find system drive $env:SystemDrive"
+        }
+        
+        $freeSpaceGB = [math]::Round($systemDrive.FreeSpace / 1GB, 2)
+        $requiredGB = 10
+        $passed = $freeSpaceGB -ge $requiredGB
+        
+        return @{
+            Passed = $passed
+            FreeSpaceGB = $freeSpaceGB
+            RequiredGB = $requiredGB
+            Message = if ($passed) { "$freeSpaceGB GB available (sufficient)" } else { "Insufficient disk space. Need $requiredGB GB, have $freeSpaceGB GB" }
+        }
+    }
+    catch {
+        return @{
+            Passed = $false
+            FreeSpaceGB = 0
+            RequiredGB = 10
+            Message = "Could not check disk space: $($_.Exception.Message)"
+        }
     }
 }
 
@@ -190,14 +216,27 @@ function Test-NetworkConnectivity {
 
 function Test-HyperVSupport {
     try {
-        $hyperVFeature = Get-WindowsOptionalFeature -FeatureName Microsoft-Hyper-V-All -Online -ErrorAction SilentlyContinue
-        $vmPlatform = Get-WindowsOptionalFeature -FeatureName VirtualMachinePlatform -Online -ErrorAction SilentlyContinue
+        $hyperVFeature = $null
+        $vmPlatform = $null
+        
+        try {
+            $hyperVFeature = Get-WindowsOptionalFeature -FeatureName Microsoft-Hyper-V-All -Online -ErrorAction SilentlyContinue
+            $vmPlatform = Get-WindowsOptionalFeature -FeatureName VirtualMachinePlatform -Online -ErrorAction SilentlyContinue
+        }
+        catch {
+            # Features may not be available on all Windows editions
+        }
         
         # Check if virtualization is enabled in BIOS
         $virtualizationEnabled = $false
         try {
-            $processor = Get-WmiObject -Class Win32_Processor | Select-Object -First 1
-            $virtualizationEnabled = $processor.VirtualizationFirmwareEnabled
+            $processor = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($processor -and $processor.PSObject.Properties['VirtualizationFirmwareEnabled']) {
+                $virtualizationEnabled = $processor.VirtualizationFirmwareEnabled
+            } else {
+                # Fallback - assume enabled if we can't detect
+                $virtualizationEnabled = $true
+            }
         }
         catch {
             # Fallback check
@@ -215,6 +254,9 @@ function Test-HyperVSupport {
     catch {
         return @{
             Passed = $false
+            HyperVAvailable = $false
+            VMPlatformAvailable = $false
+            VirtualizationEnabled = $false
             Message = "Could not check virtualization support: $($_.Exception.Message)"
         }
     }
@@ -223,10 +265,22 @@ function Test-HyperVSupport {
 function Test-AntivirusInterference {
     try {
         # Check Windows Defender status
-        $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+        $defenderStatus = $null
+        try {
+            $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+        }
+        catch {
+            # Windows Defender module may not be available
+        }
         
         # Check for other antivirus products
-        $antivirusProducts = Get-WmiObject -Namespace "root\SecurityCenter2" -Class AntiVirusProduct -ErrorAction SilentlyContinue
+        $antivirusProducts = @()
+        try {
+            $antivirusProducts = Get-CimInstance -Namespace "root\SecurityCenter2" -ClassName AntiVirusProduct -ErrorAction SilentlyContinue
+        }
+        catch {
+            # SecurityCenter2 may not be available on all systems
+        }
         
         return @{
             Passed = $true  # We don't fail on antivirus, just warn
@@ -250,6 +304,8 @@ function Test-AntivirusInterference {
     catch {
         return @{
             Passed = $true
+            WindowsDefender = $null
+            AntivirusProducts = @()
             Message = "Could not check antivirus status: $($_.Exception.Message)"
         }
     }
@@ -499,8 +555,14 @@ function Test-WSL2Prerequisites {
     $issues = @()
     
     # Check Windows version
-    $os = Get-CimInstance -ClassName Win32_OperatingSystem
-    $buildNumber = [int]$os.BuildNumber
+    try {
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+        $buildNumber = [int]$os.BuildNumber
+    }
+    catch {
+        $issues += "Could not determine Windows version: $($_.Exception.Message)"
+        $buildNumber = 0
+    }
     
     if ($buildNumber -lt 19041) {
         $issues += "Windows build $buildNumber is too old. WSL2 requires build 19041 or newer."
@@ -523,11 +585,19 @@ function Test-WSL2Prerequisites {
     }
     
     # Check disk space
-    $systemDrive = Get-WmiObject -Class Win32_LogicalDisk | Where-Object { $_.DeviceID -eq $env:SystemDrive }
-    $freeSpaceGB = [math]::Round($systemDrive.FreeSpace / 1GB, 2)
-    
-    if ($freeSpaceGB -lt 2) {
-        $issues += "Insufficient disk space. At least 2GB required, $freeSpaceGB GB available"
+    try {
+        $systemDrive = Get-CimInstance -ClassName Win32_LogicalDisk -ErrorAction Stop | Where-Object { $_.DeviceID -eq $env:SystemDrive }
+        if ($systemDrive) {
+            $freeSpaceGB = [math]::Round($systemDrive.FreeSpace / 1GB, 2)
+            if ($freeSpaceGB -lt 2) {
+                $issues += "Insufficient disk space. At least 2GB required, $freeSpaceGB GB available"
+            }
+        } else {
+            $issues += "Could not find system drive $env:SystemDrive"
+        }
+    }
+    catch {
+        $issues += "Could not check disk space: $($_.Exception.Message)"
     }
     
     $passed = $issues.Count -eq 0
@@ -1014,6 +1084,7 @@ catch {
             Error = $_.Exception.Message
             Message = "Reboot required, but automatic continuation could not be scheduled. Please run installer manually after reboot."
         }
+    }
 }
 
 function Get-InstallationState {

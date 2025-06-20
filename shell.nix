@@ -12,6 +12,8 @@ pkgs.mkShell {
     git
     gnumake
     
+    # PowerShell linting and formatting (via npm in shellHook)
+    
     # Testing and virtualization
     wine64
     qemu
@@ -42,7 +44,14 @@ pkgs.mkShell {
     echo "  NSIS:        $(makensis -VERSION 2>/dev/null || echo 'Not available')"
     echo "  PowerShell:  $(pwsh --version 2>/dev/null || echo 'Not available')"
     echo "  Node.js:     $(node --version 2>/dev/null || echo 'Not available')"
+    echo "  PS LanguageServer: $(command -v powershell-languageserver >/dev/null && echo 'Available' || echo 'Not available')"
     echo ""
+    
+    # Install PSScriptAnalyzer if not already installed
+    if ! pwsh -c "Get-Module -ListAvailable PSScriptAnalyzer" >/dev/null 2>&1; then
+      echo "Installing PSScriptAnalyzer..."
+      pwsh -c "Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser" >/dev/null 2>&1 || true
+    fi
     
     # Set up development aliases
     alias build="make build"
