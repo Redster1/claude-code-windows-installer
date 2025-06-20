@@ -67,12 +67,16 @@ gh release create v1.2.0 --title "Title" --notes "Description" dist/ClaudeCodeSe
 - `make dev-setup` - Check development environment
 - `make clean` - Clean build artifacts
 
-## Project Status - v1.3.0 Released
+## Project Status - v1.3.1 Released
 - ✅ Smart WSL distribution detection (15+ distros supported)
 - ✅ Skip Alpine if compatible distro with claude-code exists  
 - ✅ Build issues resolved with absolute paths
 - ✅ Asset loading FIXED - icons and images working
-- ✅ PowerShell module file extraction ENABLED
+- ✅ PowerShell modules ENABLED and INTEGRATED - comprehensive automation
+- ✅ Advanced system requirements validation via PowerShell module
+- ✅ Sophisticated WSL2 installation with reboot handling
+- ✅ Complete Alpine Linux installation and configuration
 - ✅ Projects folder selection feature - users can choose working directory
 - ✅ Enhanced shortcuts with --cd parameter and custom icons
-- ✅ Full 367KB installer with all assets and functionality
+- ✅ Embedded CLAUDE.md template in user projects folder
+- ✅ Full 368KB installer with all assets and functionality

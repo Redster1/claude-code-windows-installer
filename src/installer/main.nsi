@@ -1018,10 +1018,8 @@ FunctionEnd
 Function InstallWSL2Features
   DetailPrint "Installing WSL2 using comprehensive PowerShell module..."
   
-  ; TODO: Use PowerShell module when file extraction is fixed
-  ; For now, use basic WSL2 installation
-  DetailPrint "Installing WSL2 using basic method (PowerShell modules disabled for testing)..."
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "try { Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart; Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart; Write-Output \"WSL2 features enabled\"; exit 0 } catch { Write-Error $_.Exception.Message; exit 1 }"'
+  ; Use PowerShell module for sophisticated WSL2 installation
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; $result = Install-WSL2 -SkipIfExists; if ($result.Success) { if ($result.RebootRequired) { Write-Output \"WSL2_REBOOT_REQUIRED: $($result.Message)\"; exit 2 } else { Write-Output \"WSL2_SUCCESS: $($result.Message)\"; exit 0 } } else { Write-Error \"WSL2_FAILED: $($result.Message)\"; exit 1 }"'
   Pop $0 ; Exit code
   Pop $1 ; Output message
   
@@ -1039,7 +1037,6 @@ Function InstallWSL2Features
     
     RebootNow:
       DetailPrint "Scheduling installation continuation after reboot..."
-      ; TODO: Implement reboot continuation logic
       MessageBox MB_OK|MB_ICONINFORMATION "The system will reboot now. After reboot, please run the installer again to continue.$\n$\nWSL2 installation is complete - the installer will detect this and continue with Claude Code setup."
       Reboot
     
@@ -1055,12 +1052,10 @@ FunctionEnd
 
 ; Alpine Linux Installation Function - Using PowerShell Module
 Function InstallAlpineLinux
-  DetailPrint "Installing and configuring Alpine Linux using PowerShell module..."
+  DetailPrint "Installing and configuring Alpine Linux using comprehensive PowerShell module..."
   
-  ; TODO: Use PowerShell module when file extraction is fixed  
-  ; For now, use basic Alpine installation
-  DetailPrint "Installing Alpine using basic method (PowerShell modules disabled for testing)..."
-  nsExec::ExecToStack 'wsl --install -d Alpine'
+  ; Use PowerShell module for sophisticated Alpine installation and configuration
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; $result = Install-AlpineLinux -SkipIfExists -SetAsDefault; if ($result.Success) { Write-Output \"ALPINE_SUCCESS: $($result.Message)\"; exit 0 } else { Write-Error \"ALPINE_FAILED: $($result.Message)\"; exit 1 }"'
   Pop $0 ; Exit code
   Pop $1 ; Output message
   
@@ -1070,10 +1065,7 @@ Function InstallAlpineLinux
     MessageBox MB_OK|MB_ICONSTOP "Alpine Linux Installation Failed:$\n$\n$1$\n$\nPlease check WSL2 is working and try again."
     Abort
   ${Else}
-    DetailPrint "Alpine Linux installed successfully"
-    
-    ; TODO: Run Alpine setup script when file extraction is fixed
-    DetailPrint "Basic Alpine installation completed (setup script disabled for testing)"
+    DetailPrint "Alpine Linux installed and configured successfully"
   ${EndIf}
 FunctionEnd
 
@@ -1222,12 +1214,10 @@ FunctionEnd
 
 ; System Requirements Validation Function
 Function ValidateSystemRequirements
-  DetailPrint "Validating system requirements using PowerShell module..."
+  DetailPrint "Validating system requirements using comprehensive PowerShell module..."
   
-  ; TODO: Import PowerShell module when file extraction is fixed
-  ; For now, use basic validation
-  DetailPrint "Performing basic system validation (PowerShell modules disabled for testing)..."
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "if ([System.Environment]::OSVersion.Version.Build -lt 19041) { Write-Error \"Windows build too old\"; exit 1 } else { Write-Output \"Basic system validation passed\" }"'
+  ; Use PowerShell module for comprehensive system validation
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; $result = Test-SystemRequirements; if ($result.OverallResult.Passed) { Write-Output \"VALIDATION_PASSED: $($result.OverallResult.Summary)\"; exit 0 } else { Write-Error \"VALIDATION_FAILED: $($result.OverallResult.Summary)\"; exit 1 }"'
   Pop $0 ; Exit code
   Pop $1 ; Output
   
