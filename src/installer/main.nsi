@@ -42,8 +42,8 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
 
-; Custom dependency check page (DISABLED for testing)
-; Page custom DependencyCheckPage DependencyCheckPageLeave
+; Custom dependency check page
+Page custom DependencyCheckPage DependencyCheckPageLeave
 
 ; Custom projects folder selection page
 Page custom ProjectsFolderPage ProjectsFolderPageLeave
@@ -148,42 +148,42 @@ Function CheckDependenciesAsync
   
   ; Update progress
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 5 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR: Starting comprehensive dependency scan..."
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:🔍 Starting comprehensive dependency scan..."
   SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Checking both Windows and WSL environments..."
   
   ; Check WSL2 using PowerShell module (most comprehensive)
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 15 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR: Checking WSL2 installation..."
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:📦 Checking WSL2 installation..."
   Call CheckWSL2Comprehensive
   
   ; Check Node.js in both Windows and WSL
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 30 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR: Checking Node.js (Windows + WSL)..."
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:📦 Checking Node.js (Windows + WSL)..."
   Call CheckNodeJSDual
   
   ; Check Git in both Windows and WSL
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 50 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR: Checking Git (Windows + WSL)..."
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:📦 Checking Git (Windows + WSL)..."
   Call CheckGitDual
   
   ; Check Curl in both Windows and WSL
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 70 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR: Checking Curl (Windows + WSL)..."
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:📦 Checking Curl (Windows + WSL)..."
   Call CheckCurlDual
   
   ; Check Claude Code in both Windows and WSL (most important!)
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 85 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR: Checking Claude Code (Windows + WSL)..."
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:🤖 Checking Claude Code (Windows + WSL)..."
   Call CheckClaudeCodeDual
   
   ; Check for compatible WSL distribution (NEW - this determines if we need Alpine)
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 95 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR: Checking for compatible WSL distribution..."
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:🔧 Checking for compatible WSL distribution..."
   Call CheckCompatibleWSLDistribution
   
   ; Complete scan
   SendMessage $DependencyProgressBar ${PBM_SETPOS} 100 0
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR: Comprehensive dependency scan completed"
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:✅ Comprehensive dependency scan completed"
   
   ${NSD_SetText} $DependencyStatusLabel "Dependency scan completed. Review detailed results above."
 FunctionEnd
@@ -198,14 +198,14 @@ Function CheckWSL2Comprehensive
     Pop $1 ; Version output
     
     ${If} $0 == 0
-      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    WSL2 detected via direct check"
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ WSL2 detected via direct check"
       StrCpy $SkipWSL2 "true"
     ${Else}
-      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    WSL installed but version unclear"
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ⚠️ WSL installed but version unclear"
       StrCpy $SkipWSL2 "false"
     ${EndIf}
   ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    WSL2 not installed or not accessible"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ WSL2 not installed or not accessible"
     StrCpy $SkipWSL2 "false"
   ${EndIf}
 FunctionEnd
@@ -218,7 +218,7 @@ Function CheckNodeJSDual
   Pop $0
   ${If} $0 == 0
     Pop $1 ; Version
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Node.js in Windows: $1"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Node.js in Windows: $1"
     StrCpy $5 "true"
     StrCpy $NodeJSStatus "$1 (Windows)"
   ${EndIf}
@@ -229,7 +229,7 @@ Function CheckNodeJSDual
     Pop $0
     ${If} $0 == 0
       Pop $2 ; WSL Version
-      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Node.js in WSL: $2"
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Node.js in WSL: $2"
       StrCpy $5 "true"
       ; Prefer WSL version if both exist
       StrCpy $NodeJSStatus "$2 (WSL)"
@@ -239,7 +239,7 @@ Function CheckNodeJSDual
   ${If} $5 == "true"
     StrCpy $SkipNodeJS "true"
   ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Node.js not found in Windows or WSL"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Node.js not found in Windows or WSL"
     StrCpy $SkipNodeJS "false"
   ${EndIf}
 FunctionEnd
@@ -252,7 +252,7 @@ Function CheckGitDual
   Pop $0
   ${If} $0 == 0
     Pop $1 ; Version
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Git in Windows: $1"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Git in Windows: $1"
     StrCpy $5 "true"
     StrCpy $GitStatus "$1 (Windows)"
   ${EndIf}
@@ -263,7 +263,7 @@ Function CheckGitDual
     Pop $0
     ${If} $0 == 0
       Pop $2 ; WSL Version
-      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Git in WSL: $2"
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Git in WSL: $2"
       StrCpy $5 "true"
       ; Keep Windows version if both, as it's more useful for installer
       ${If} $GitStatus == ""
@@ -275,7 +275,7 @@ Function CheckGitDual
   ${If} $5 == "true"
     StrCpy $SkipGit "true"
   ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Git not found in Windows or WSL"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Git not found in Windows or WSL"
     StrCpy $SkipGit "false"
   ${EndIf}
 FunctionEnd
@@ -288,7 +288,7 @@ Function CheckCurlDual
   Pop $0
   ${If} $0 == 0
     Pop $1 ; Version
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Curl in Windows (built-in)"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Curl in Windows (built-in)"
     StrCpy $5 "true"
     StrCpy $CurlStatus "Windows built-in"
   ${EndIf}
@@ -299,7 +299,7 @@ Function CheckCurlDual
     Pop $0
     ${If} $0 == 0
       Pop $2 ; WSL Version
-      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Curl in WSL"
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Curl in WSL"
       StrCpy $5 "true"
       ; Keep Windows version as primary
       ${If} $CurlStatus == ""
@@ -311,7 +311,7 @@ Function CheckCurlDual
   ${If} $5 == "true"
     StrCpy $SkipCurl "true"
   ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Curl not found in Windows or WSL"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Curl not found in Windows or WSL"
     StrCpy $SkipCurl "false"
   ${EndIf}
 FunctionEnd
@@ -325,7 +325,7 @@ Function CheckClaudeCodeDual
   Pop $0
   ${If} $0 == 0
     Pop $1 ; Version
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Claude Code in Windows: $1"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Claude Code in Windows: $1"
     StrCpy $5 "true"
     StrCpy $6 "Windows"
     StrCpy $ClaudeStatus "$1 (Windows)"
@@ -338,7 +338,7 @@ Function CheckClaudeCodeDual
     Pop $0
     ${If} $0 == 0
       Pop $2 ; WSL Version
-      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Claude Code in WSL: $2"
+      SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Claude Code in WSL: $2"
       StrCpy $5 "true"
       StrCpy $6 "WSL"
       StrCpy $ClaudeStatus "$2 (WSL)"
@@ -348,7 +348,7 @@ Function CheckClaudeCodeDual
       Pop $0
       ${If} $0 == 0
         Pop $3 ; Debian Version
-        SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Claude Code in WSL (Debian): $3"
+        SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Claude Code in WSL (Debian): $3"
         StrCpy $5 "true"
         StrCpy $6 "WSL-Debian"
         StrCpy $ClaudeStatus "$3 (WSL-Debian)"
@@ -358,7 +358,7 @@ Function CheckClaudeCodeDual
         Pop $0
         ${If} $0 == 0
           Pop $4 ; Ubuntu Version
-          SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Claude Code in WSL (Ubuntu): $4"
+          SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Claude Code in WSL (Ubuntu): $4"
           StrCpy $5 "true"
           StrCpy $6 "WSL-Ubuntu"
           StrCpy $ClaudeStatus "$4 (WSL-Ubuntu)"
@@ -369,10 +369,10 @@ Function CheckClaudeCodeDual
   
   ${If} $5 == "true"
     StrCpy $SkipClaude "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Claude Code detected in $6 - installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Claude Code detected in $6 - installation not needed!"
   ${Else}
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Claude Code not found in Windows, WSL, Debian, or Ubuntu"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Will install Claude Code in Alpine Linux"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ Claude Code not found in Windows, WSL, Debian, or Ubuntu"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   💡 Will install Claude Code in Alpine Linux"
     StrCpy $SkipClaude "false"
   ${EndIf}
 FunctionEnd
@@ -382,17 +382,17 @@ Function CheckCompatibleWSLDistribution
   ; If so, we can skip installing Alpine Linux entirely
   
   ${If} $SkipWSL2 == "false"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    WSL2 not available - Alpine Linux will be needed"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ⚠️ WSL2 not available - Alpine Linux will be needed"
     StrCpy $SkipAlpine "false"
     Return
   ${EndIf}
   
   ; Get list of available WSL distributions
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Scanning available WSL distributions..."
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🔍 Scanning available WSL distributions..."
   nsExec::ExecToStack 'wsl --list --quiet 2>nul'
   Pop $0
   ${If} $0 != 0
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Could not list WSL distributions - Alpine will be installed"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ⚠️ Could not list WSL distributions - Alpine will be installed"
     StrCpy $SkipAlpine "false"
     Return
   ${EndIf}
@@ -407,8 +407,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution $7
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Compatible distribution found: $7"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: $7"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -419,8 +419,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "debian"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Compatible distribution found: Debian"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Debian"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -430,8 +430,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "Ubuntu"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Compatible distribution found: Ubuntu"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Ubuntu"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -441,8 +441,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "fedora"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Compatible distribution found: Fedora"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Fedora"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -452,8 +452,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "openSUSE-Leap"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Compatible distribution found: openSUSE Leap"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: openSUSE Leap"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -463,8 +463,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "openSUSE-Tumbleweed"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Compatible distribution found: openSUSE Tumbleweed"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: openSUSE Tumbleweed"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -474,8 +474,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "Arch"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Compatible distribution found: Arch Linux"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Arch Linux"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -485,8 +485,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "CentOS"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Compatible distribution found: CentOS"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: CentOS"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -496,8 +496,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "RHEL"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Compatible distribution found: Red Hat Enterprise Linux"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:    Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Red Hat Enterprise Linux"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -507,8 +507,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "OracleLinux"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Compatible distribution found: Oracle Linux"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Oracle Linux"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -518,8 +518,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "SLES"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Compatible distribution found: SUSE Linux Enterprise Server"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: SUSE Linux Enterprise Server"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -529,8 +529,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "kali-linux"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Compatible distribution found: Kali Linux"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Kali Linux"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -540,8 +540,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "Pengwin"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Compatible distribution found: Pengwin"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Pengwin"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -551,8 +551,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "Ubuntu-18.04"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Compatible distribution found: Ubuntu 18.04"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Ubuntu 18.04"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -562,8 +562,8 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "Ubuntu-20.04"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Compatible distribution found: Ubuntu 20.04"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Ubuntu 20.04"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
@@ -573,14 +573,14 @@ Function CheckCompatibleWSLDistribution
   ${If} $7 != ""
     StrCpy $CompatibleDistribution "Ubuntu-22.04"
     StrCpy $SkipAlpine "true"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Compatible distribution found: Ubuntu 22.04"
-    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Alpine Linux installation not needed!"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ✅ Compatible distribution found: Ubuntu 22.04"
+    SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   🎯 Alpine Linux installation not needed!"
     Return
   ${EndIf}
   
   ; No compatible distribution found
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   No existing distribution has all required tools"
-  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   Will install Alpine Linux with all tools"
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   ❌ No existing distribution has all required tools"
+  SendMessage $DependencyListBox ${LB_ADDSTRING} 0 "STR:   💡 Will install Alpine Linux with all tools"
   StrCpy $SkipAlpine "false"
   StrCpy $CompatibleDistribution ""
 FunctionEnd
@@ -819,20 +819,20 @@ Function ProcessDependencyResults
   StrCpy $9 "Claude Code Installation Summary$\n$\n"
   
   ${If} $8 != ""
-    StrCpy $9 "$9 Found existing components:$\n$8$\n"
+    StrCpy $9 "$9✅ Found existing components:$\n$8$\n"
   ${EndIf}
   
   ${If} $0 > 0
-    StrCpy $9 "$9 Components to install:$\n$7$\n"
-    StrCpy $9 "$9 Estimated time: $1-$2 minutes$\n"
+    StrCpy $9 "$9📦 Components to install:$\n$7$\n"
+    StrCpy $9 "$9⏱️ Estimated time: $1-$2 minutes$\n"
     ${If} $SkipWSL2 == "false"
-      StrCpy $9 "$9  System reboot may be required for WSL2$\n"
+      StrCpy $9 "$9⚠️  System reboot may be required for WSL2$\n"
     ${EndIf}
   ${Else}
-    StrCpy $9 "$9 All components already installed!$\n$\n"
+    StrCpy $9 "$9🎉 All components already installed!$\n$\n"
     StrCpy $9 "$9The installer will verify configuration and$\n"
     StrCpy $9 "$9create shortcuts for easy access.$\n$\n"
-    StrCpy $9 "$9 Estimated time: 1-2 minutes$\n"
+    StrCpy $9 "$9⏱️ Estimated time: 1-2 minutes$\n"
   ${EndIf}
   
   StrCpy $9 "$9$\nContinue with installation?"
@@ -886,18 +886,10 @@ Section "Claude Code Installation" SecMain
   File "${ASSETS_DIR}\wizard-header.bmp"
   File "${ASSETS_DIR}\wizard-sidebar.bmp"
   
-  ; Extract NSIS-safe PowerShell modules (no restricted characters)
-  SetOutPath "$INSTDIR\scripts\powershell\nsis-safe"
-  File "${BUILD_DIR}\scripts\powershell\nsis-safe\ClaudeInstaller.psm1"
-  File "${BUILD_DIR}\scripts\powershell\nsis-safe\ProgressTracker.psm1"
-  
-  ; Extract internal PowerShell scripts (complex logic with restricted characters)
-  SetOutPath "$INSTDIR\scripts\powershell\internal"
-  File "${BUILD_DIR}\scripts\powershell\internal\SystemValidation.ps1"
-  File "${BUILD_DIR}\scripts\powershell\internal\WSL2Management.ps1"
-  File "${BUILD_DIR}\scripts\powershell\internal\WSL2Status.ps1"
-  File "${BUILD_DIR}\scripts\powershell\internal\AlpineSetup.ps1"
-  File "${BUILD_DIR}\scripts\powershell\internal\ProgressSystem.ps1"
+  ; Extract PowerShell scripts
+  SetOutPath "$INSTDIR\scripts\powershell"
+  File "${BUILD_DIR}\scripts\powershell\ClaudeCodeInstaller.psm1"
+  File "${BUILD_DIR}\scripts\powershell\ProgressTracker.psm1"
   
   ; Extract bash scripts  
   SetOutPath "$INSTDIR\scripts\bash"
@@ -941,9 +933,9 @@ Function PerformInstallation
   
   DetailPrint "Starting Claude Code installation on fresh Windows system"
   
-  ; Step 0: Validate system requirements using PowerShell module (DISABLED)
-  ; DetailPrint "Validating system requirements..."
-  ; Call ValidateSystemRequirements
+  ; Step 0: Validate system requirements using PowerShell module
+  DetailPrint "Validating system requirements..."
+  Call ValidateSystemRequirements
   
   ${NSD_SetText} $CurrentOperation "Starting installation..."
   SendMessage $ProgressBar ${PBM_SETPOS} 5 0
@@ -1027,7 +1019,7 @@ Function InstallWSL2Features
   DetailPrint "Installing WSL2 using comprehensive PowerShell module..."
   
   ; Use PowerShell module for sophisticated WSL2 installation
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\nsis-safe\ClaudeInstaller.psm1\"; try { $result = Invoke-WSL2Installation -SkipIfExists; if ($result.Success) { Write-Output \"WSL2_SUCCESS\"; exit 0 } else { Write-Output \"WSL2_FAILED\"; exit 1 } } catch { Write-Output \"WSL2_ERROR\"; exit 1 }"'
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; try { $result = Install-WSL2 -SkipIfExists; if ($result) { Write-Output \"WSL2_SUCCESS\"; exit 0 } else { Write-Output \"WSL2_FAILED\"; exit 1 } } catch { Write-Output \"WSL2_ERROR\"; exit 1 }"'
   Pop $0 ; Exit code
   Pop $1 ; Output message
   
@@ -1063,7 +1055,7 @@ Function InstallAlpineLinux
   DetailPrint "Installing and configuring Alpine Linux using comprehensive PowerShell module..."
   
   ; Use PowerShell module for sophisticated Alpine installation and configuration
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\nsis-safe\ClaudeInstaller.psm1\"; try { $result = Invoke-AlpineLinuxSetup -SkipIfExists -SetAsDefault; if ($result.Success) { Write-Output \"ALPINE_SUCCESS\"; exit 0 } else { Write-Output \"ALPINE_FAILED\"; exit 1 } } catch { Write-Output \"ALPINE_ERROR\"; exit 1 }"'
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; try { $result = Install-AlpineLinux -SkipIfExists -SetAsDefault; if ($result) { Write-Output \"ALPINE_SUCCESS\"; exit 0 } else { Write-Output \"ALPINE_FAILED\"; exit 1 } } catch { Write-Output \"ALPINE_ERROR\"; exit 1 }"'
   Pop $0 ; Exit code
   Pop $1 ; Output message
   
@@ -1225,7 +1217,7 @@ Function ValidateSystemRequirements
   DetailPrint "Validating system requirements using comprehensive PowerShell module..."
   
   ; Use PowerShell module for comprehensive system validation
-  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\nsis-safe\ClaudeInstaller.psm1\"; try { $result = Test-BasicSystemRequirement; if ($result.Success) { Write-Output \"VALIDATION_PASSED\"; exit 0 } else { Write-Output \"FAILED: $($result.Message)\"; if ($result.Details) { Write-Output \"Windows: $($result.Details.WindowsBuild) (OK: $($result.Details.WindowsOK))\"; Write-Output \"Architecture: $($result.Details.ArchitectureOK)\"; Write-Output \"Admin: $($result.Details.AdminRightsOK)\" }; exit 1 } } catch { Write-Output \"ERROR: $($_.Exception.Message)\"; exit 1 }"'
+  nsExec::ExecToStack 'powershell.exe -ExecutionPolicy Bypass -Command "Import-Module \"$INSTDIR\scripts\powershell\ClaudeCodeInstaller.psm1\"; try { $result = Test-SystemRequirements; if ($result) { Write-Output \"VALIDATION_PASSED\"; exit 0 } else { Write-Output \"VALIDATION_FAILED\"; exit 1 } } catch { Write-Output \"VALIDATION_ERROR\"; exit 1 }"'
   Pop $0 ; Exit code
   Pop $1 ; Output
   
