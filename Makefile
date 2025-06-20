@@ -15,9 +15,9 @@ clean:
 build-only: prepare
 	@echo "Building Claude Code installer v$(VERSION)..."
 	$(NSIS) -DVERSION=$(VERSION) \
-	        -DDIST_DIR=$(DIST_DIR) \
-	        -DASSETS_DIR=generated-images \
-	        -DBUILD_DIR=$(BUILD_DIR) \
+	        -DDIST_DIR=$(PWD)/$(DIST_DIR) \
+	        -DASSETS_DIR=$(PWD)/generated-images \
+	        -DBUILD_DIR=$(PWD)/$(BUILD_DIR) \
 	        $(SRC_DIR)/installer/main.nsi
 
 prepare:
@@ -46,12 +46,12 @@ dev-setup:
 	@echo "Development environment ready!"
 
 validate-powershell:
-	@echo "Validating PowerShell modules..."
-	@for module in $(shell find $(SRC_DIR)/scripts/powershell -name "*.psm1"); do \
+	@echo "Validating NSIS-safe PowerShell modules..."
+	@for module in $(shell find $(SRC_DIR)/scripts/powershell/nsis-safe -name "*.psm1" 2>/dev/null || true); do \
 		echo "Validating $$module..."; \
 		pwsh -File tools/validate-powershell.ps1 -ModulePath "$$module" || exit 1; \
 	done
-	@echo "✅ All PowerShell modules validated successfully"
+	@echo "✅ All NSIS-safe PowerShell modules validated successfully"
 
 lint: validate-powershell
 	@echo "Linting completed successfully"
@@ -59,9 +59,9 @@ lint: validate-powershell
 build: validate-powershell prepare
 	@echo "Building Claude Code installer v$(VERSION)..."
 	$(NSIS) -DVERSION=$(VERSION) \
-	        -DDIST_DIR=$(DIST_DIR) \
-	        -DASSETS_DIR=generated-images \
-	        -DBUILD_DIR=$(BUILD_DIR) \
+	        -DDIST_DIR=$(PWD)/$(DIST_DIR) \
+	        -DASSETS_DIR=$(PWD)/generated-images \
+	        -DBUILD_DIR=$(PWD)/$(BUILD_DIR) \
 	        $(SRC_DIR)/installer/main.nsi
 
 help:

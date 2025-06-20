@@ -82,9 +82,12 @@ function Test-ProblematicPatterns {
     }
     
     # Check for missing CIM error handling
-    $getCimInstancePattern = 'Get-CimInstance[^;]*(?!\s*-ErrorAction)'
-    if ([regex]::IsMatch($content, $getCimInstancePattern)) {
-        $issues += "Get-CimInstance calls without explicit error handling detected"
+    $getCimInstanceLines = $content -split "`n" | Where-Object { $_ -match 'Get-CimInstance' }
+    foreach ($line in $getCimInstanceLines) {
+        if ($line -notmatch '-ErrorAction') {
+            $issues += "Get-CimInstance calls without explicit error handling detected"
+            break
+        }
     }
     
     if ($issues.Count -gt 0) {
